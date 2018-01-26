@@ -121,7 +121,7 @@ static void config_print(FILE *file, struct benchmark_config *cfg)
         cfg->unix_socket,
         cfg->protocol,
         cfg->out_file,
-        cfg->client_stats,	
+        cfg->client_stats,
         cfg->run_count,
         cfg->debug,
         cfg->requests,
@@ -163,7 +163,7 @@ static void config_print_to_json(json_handler * jsonhandler, struct benchmark_co
     char tmpbuf[512];
     
     jsonhandler->open_nesting("configuration");  
-	
+
     jsonhandler->write_obj("server"            ,"\"%s\"",      	cfg->server);
     jsonhandler->write_obj("port"              ,"%u",          	cfg->port);
     jsonhandler->write_obj("unix socket"       ,"\"%s\"",      	cfg->unix_socket);
@@ -204,7 +204,7 @@ static void config_print_to_json(json_handler * jsonhandler, struct benchmark_co
     jsonhandler->write_obj("num-slaves"        ,"\"%u:%u\"",    cfg->num_slaves.min, cfg->num_slaves.max);
     jsonhandler->write_obj("wait-timeout"      ,"\"%u-%u\"",   	cfg->wait_timeout.min, cfg->wait_timeout.max);
 
-	jsonhandler->close_nesting();
+    jsonhandler->close_nesting();
 }
 
 static void config_init_defaults(struct benchmark_config *cfg)
@@ -852,12 +852,17 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         (*i)->start();
     }
 
+    struct timeval curstartTime, prevstartTime, startTime, stopTime;
+    gettimeofday(&prevstartTime, NULL);
+    startTime = prevstartTime;
+
     unsigned long int prev_ops = 0;
     unsigned long int prev_bytes = 0;
     unsigned long int prev_duration = 0;
     double prev_latency = 0, cur_latency = 0;
     unsigned long int cur_ops_sec = 0;
     unsigned long int cur_bytes_sec = 0;
+    unsigned long int realTotalOps = 0;
 
     // provide some feedback...
     unsigned int active_threads = 0;
@@ -882,19 +887,30 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
             float factor = ((float)(thread_counter - 1) / thread_counter);
             duration =  factor * duration +  (float)(*i)->m_cg->get_duration_usec() / thread_counter ;
         }
-        
-        unsigned long int cur_ops = total_ops-prev_ops;
-        unsigned long int cur_bytes = total_bytes-prev_bytes;
-        unsigned long int cur_duration = duration-prev_duration;
-        double cur_total_latency = total_latency-prev_latency;
+
+        gettimeofday(&curstartTime, NULL);
+        double curDuration = (curstartTime.tv_sec - prevstartTime.tv_sec) +
+                             ((curstartTime.tv_usec - prevstartTime.tv_usec) / 1000000.0);
+        // In order to throw out the last loop
+        stopTime = prevstartTime;
+        realTotalOps = prev_ops;
+
+        unsigned long int cur_ops = total_ops - prev_ops;
+        unsigned long int cur_bytes = total_bytes - prev_bytes;
+        unsigned long int cur_duration = duration - prev_duration;
+        double cur_total_latency = total_latency - prev_latency;
         prev_ops = total_ops;
         prev_bytes = total_bytes;
         prev_latency = total_latency;
         prev_duration = duration;
+        prevstartTime = curstartTime;
         
         unsigned long int ops_sec = 0;
         unsigned long int bytes_sec = 0;
         double avg_latency = 0;
+
+        double curOpsSec = cur_ops / curDuration;
+  
         if (duration > 1) {
             ops_sec = (long)( (double)total_ops / duration * 1000000);
             bytes_sec = (long)( (double)total_bytes / duration * 1000000);
@@ -916,11 +932,16 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         else
             progress = 100.0 * (duration / 1000000.0)/cfg->test_time;
         
-        fprintf(stderr, "[RUN #%u %.0f%%, %3u secs] %2u threads: %11lu ops, %7lu (avg: %7lu) ops/sec, %s/sec (avg: %s/sec), %5.2f (avg: %5.2f) msec latency\r",
-            run_id, progress, (unsigned int) (duration / 1000000), active_threads, total_ops, cur_ops_sec, ops_sec, cur_bytes_str, bytes_str, cur_latency, avg_latency);
+        fprintf(stderr, "[RUN #%u %.0f%%, %3u secs] %2u threads: %11lu ops, %7lu (avg: %7lu) ops/sec, %s/sec (avg: %s/sec), %5.2f (avg: %5.2f) msec latency, real throughput %.2lf ops/sec \r",
+            run_id, progress, (unsigned int) (duration / 1000000), active_threads, total_ops, cur_ops_sec, ops_sec, cur_bytes_str, bytes_str, cur_latency, avg_latency, curOpsSec);
+
+        // realTotalOps = prev_ops; // throw out the final loop
     } while (active_threads > 0);
 
     fprintf(stderr, "\n\n");
+    double realDuration = (stopTime.tv_sec - startTime.tv_sec) + ((stopTime.tv_usec - startTime.tv_usec) / 1000000.0);
+    double realThroughput = realTotalOps / realDuration;
+    fprintf(stderr, "Real throughput (ops/sec) is: %.2lf \n", realThroughput);
 
     // join all threads back and unify stats
     run_stats stats;
