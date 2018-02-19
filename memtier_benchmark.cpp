@@ -978,6 +978,9 @@ int main(int argc, char *argv[])
 {
     struct benchmark_config cfg;
 
+    pthread_mutex_init(&get_latencies_mutex, NULL);
+    pthread_mutex_init(&set_latencies_mutex, NULL);
+
     memset(&cfg, 0, sizeof(struct benchmark_config));
     if (config_parse_args(argc, argv, &cfg) < 0) {
         usage();
@@ -1276,4 +1279,23 @@ int main(int argc, char *argv[])
     delete obj_gen;
     if (keylist != NULL)
         delete keylist;
+
+    fprintf(stderr, "Writing to setLatencies.txt... \n");
+    FILE *setf = fopen("setLatencies.txt", "w");
+    int len = set_latencies.size();
+    for (int i = 0; i < len; ++i) {
+        fprintf(setf, "%u\n", set_latencies[i]);
+    }
+    fclose(setf);
+
+    fprintf(stderr, "Writing to getLatencies.txt... \n");
+    FILE *getf = fopen("getLatencies.txt", "w");
+    len = get_latencies.size();
+    for (int i = 0; i < len; ++i) {
+        fprintf(getf, "%u\n", get_latencies[i]);
+    }
+    fclose(getf);
+
+    pthread_mutex_destroy(&get_latencies_mutex);
+    pthread_mutex_destroy(&set_latencies_mutex);
 }

@@ -51,6 +51,12 @@
 #include "client.h"
 #include "cluster_client.h"
 
+// Record all latencies in micro seconds
+std::vector<unsigned int> get_latencies;
+std::vector<unsigned int> set_latencies;
+pthread_mutex_t get_latencies_mutex;
+pthread_mutex_t set_latencies_mutex;
+
 float get_2_meaningful_digits(float val)
 {
     float log = floor(log10(val));
@@ -744,6 +750,10 @@ void run_stats::update_get_op(struct timeval* ts, unsigned int bytes, unsigned i
     m_totals.m_latency += latency;
 
     m_get_latency_map[get_2_meaningful_digits((float)latency/1000)]++;
+
+    pthread_mutex_lock(&get_latencies_mutex);
+    get_latencies.push_back(latency);
+    pthread_mutex_unlock(&get_latencies_mutex);
 }
 
 void run_stats::update_set_op(struct timeval* ts, unsigned int bytes, unsigned int latency)
@@ -759,6 +769,10 @@ void run_stats::update_set_op(struct timeval* ts, unsigned int bytes, unsigned i
     m_totals.m_latency += latency;
 
     m_set_latency_map[get_2_meaningful_digits((float)latency/1000)]++;
+
+    pthread_mutex_lock(&set_latencies_mutex);
+    set_latencies.push_back(latency);
+    pthread_mutex_unlock(&set_latencies_mutex);
 }
 
 void run_stats::update_wait_op(struct timeval *ts, unsigned int latency)

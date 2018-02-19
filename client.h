@@ -41,6 +41,11 @@
 
 #define MAIN_CONNECTION m_connections[0]
 
+extern std::vector<unsigned int> get_latencies;
+extern std::vector<unsigned int> set_latencies;
+extern pthread_mutex_t get_latencies_mutex;
+extern pthread_mutex_t set_latencies_mutex;
+
 class client;               // forward decl
 class client_group;         // forward decl
 struct benchmark_config;
