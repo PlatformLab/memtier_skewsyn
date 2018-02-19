@@ -30,6 +30,7 @@
 #include <getopt.h>
 #include <assert.h>
 #include <errno.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 
@@ -973,6 +974,23 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     return stats;
 }
 
+// Check a directory exists or not. If not exists, then create one.
+static void check_dir(std::string &dir) {
+    struct stat st;
+    if (stat(dir.c_str(), &st) == 0) {
+        if ((st.st_mode & S_IFDIR) != 0) {
+            fprintf(stderr, "\nOutput dir: %s exists!\n", dir.c_str());
+        }
+    } else {
+        fprintf(stderr, "Creating dir: %s ...\n", dir.c_str());
+        const int dir_err = mkdir(dir.c_str(),  S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+        if (dir_err != 0) {
+            printf("Error creating dir: %s !\n", dir.c_str());
+            exit(-1);
+        }
+    }
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -1280,21 +1298,42 @@ int main(int argc, char *argv[])
     if (keylist != NULL)
         delete keylist;
 
-    fprintf(stderr, "Writing to setLatencies.txt... \n");
-    FILE *setf = fopen("setLatencies.txt", "w");
-    int len = set_latencies.size();
-    for (int i = 0; i < len; ++i) {
-        fprintf(setf, "%u\n", set_latencies[i]);
-    }
-    fclose(setf);
+    // Store latencies to files
+    std::string output_dir = "./latency_log/";
+    char namebuff[50];
+    std::string output_path;
 
-    fprintf(stderr, "Writing to getLatencies.txt... \n");
-    FILE *getf = fopen("getLatencies.txt", "w");
-    len = get_latencies.size();
-    for (int i = 0; i < len; ++i) {
-        fprintf(getf, "%u\n", get_latencies[i]);
+    check_dir(output_dir);
+
+    struct timeval curr_time;
+    gettimeofday(&curr_time, NULL);
+    unsigned long long curr_timestamp = curr_time.tv_sec;
+
+    if (set_latencies.size() > 0) {
+        sprintf(namebuff, "setLatencies_%llu.txt", curr_timestamp);
+        output_path = output_dir + namebuff;
+        fprintf(stderr, "Writing latencies to %s \n", output_path.c_str());
+
+        FILE *setf = fopen(output_path.c_str(), "w");
+        int len = set_latencies.size();
+        for (int i = 0; i < len; ++i) {
+            fprintf(setf, "%u\n", set_latencies[i]);
+        }
+        fclose(setf);
     }
-    fclose(getf);
+
+    if (get_latencies.size() > 0) {
+        sprintf(namebuff, "getLatencies_%llu.txt", curr_timestamp);
+        output_path = output_dir + namebuff;
+        fprintf(stderr, "Writing latencies to %s \n", output_path.c_str());
+
+        FILE *getf = fopen(output_path.c_str(), "w");
+        int len = get_latencies.size();
+        for (int i = 0; i < len; ++i) {
+            fprintf(getf, "%u\n", get_latencies[i]);
+        }
+        fclose(getf);
+    }
 
     pthread_mutex_destroy(&get_latencies_mutex);
     pthread_mutex_destroy(&set_latencies_mutex);
