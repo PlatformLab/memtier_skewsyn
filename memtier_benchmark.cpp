@@ -388,7 +388,6 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
                     exit(0);
                 case 'b':
                     cfg->blocking = true;
-                    fprintf(stderr, "In blocking mode!\n");
                     break;
                 case 's':
                     cfg->server = optarg;
@@ -671,7 +670,11 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
 
     if (cfg->cluster_mode && !verify_cluster_option(cfg))
         return -1;
-
+    if (cfg->blocking) {
+        fprintf(stderr, "In blocking libevent loop mode!\n");
+    } else {
+        fprintf(stderr, "In non-blocking libevent loop mode!\n");
+    }
     return 0;
 }
 
