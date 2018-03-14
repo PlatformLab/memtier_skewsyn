@@ -364,6 +364,7 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         { "cluster-mode",                0, 0, o_cluster_mode },
         { "help",                       0, 0, 'h' },
         { "version",                    0, 0, 'v' },
+        { "blocking",                   0, 0, 'b' },
         { NULL,                         0, 0, 0 }
     };
 
@@ -371,7 +372,7 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
     int c;
     char *endptr;
     while ((c = getopt_long(argc, argv, 
-                "s:S:p:P:o:x:DRn:c:t:d:a:h", long_options, &option_index)) != -1)
+                "s:S:p:P:o:x:DRn:c:t:d:a:hb", long_options, &option_index)) != -1)
     {
         switch (c) {
                 case 'h':
@@ -385,6 +386,10 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
                     puts("the GNU General Public License <http://www.gnu.org/licenses/gpl.html>.");
                     puts("There is NO WARRANTY, to the extent permitted by law.");
                     exit(0);
+                case 'b':
+                    cfg->blocking = true;
+                    fprintf(stderr, "In blocking mode!\n");
+                    break;
                 case 's':
                     cfg->server = optarg;
                     break;

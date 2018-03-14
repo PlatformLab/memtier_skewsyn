@@ -82,6 +82,8 @@ struct benchmark_config {
     // JSON additions
     const char *json_out_file;
     bool cluster_mode;
+    // blocking libevent loop or not
+    bool blocking;
 };
 
 

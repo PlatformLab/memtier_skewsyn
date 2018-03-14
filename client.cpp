@@ -548,7 +548,14 @@ int client_group::prepare(void)
 
 void client_group::run(void)
 {
-    event_base_dispatch(m_base);
+    if (m_config->blocking) {
+        event_base_dispatch(m_base);
+    } else {
+        int ret = 0;
+        while (ret == 0) {
+            ret = event_base_loop(m_base, EVLOOP_NONBLOCK);
+        }
+    }
 }
 
 unsigned long int client_group::get_total_bytes(void)
