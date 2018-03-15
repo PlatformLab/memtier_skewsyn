@@ -116,6 +116,13 @@ public:
         return m_port;
     }
 
+    // Check m_sockfd writable or not
+    int check_sockfd_writable() {
+        fd_set writeset;
+        FD_ZERO(&writeset);
+        FD_SET(m_sockfd, &writeset);
+        return  select(m_sockfd + 1, NULL, &writeset, NULL, NULL);
+    }
 
 private:
     void setup_event();

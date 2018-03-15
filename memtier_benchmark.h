@@ -84,6 +84,8 @@ struct benchmark_config {
     bool cluster_mode;
     // blocking libevent loop or not
     bool blocking;
+    int skew_level;
+    int server_threads;
 };
 
 

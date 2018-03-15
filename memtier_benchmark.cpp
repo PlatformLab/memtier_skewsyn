@@ -313,7 +313,8 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         o_num_slaves,
         o_wait_timeout, 
         o_json_out_file,
-        o_cluster_mode
+        o_cluster_mode,
+        o_server_threads
     };
     
     static struct option long_options[] = {
@@ -365,6 +366,8 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         { "help",                       0, 0, 'h' },
         { "version",                    0, 0, 'v' },
         { "blocking",                   0, 0, 'b' },
+        { "skew-level",                 1, 0, 'k'},
+        { "server-threads",             1, 0, o_server_threads },
         { NULL,                         0, 0, 0 }
     };
 
@@ -372,7 +375,7 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
     int c;
     char *endptr;
     while ((c = getopt_long(argc, argv, 
-                "s:S:p:P:o:x:DRn:c:t:d:a:hb", long_options, &option_index)) != -1)
+                "s:S:p:P:o:x:DRn:c:t:d:a:hbk:", long_options, &option_index)) != -1)
     {
         switch (c) {
                 case 'h':
@@ -388,6 +391,22 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
                     exit(0);
                 case 'b':
                     cfg->blocking = true;
+                    break;
+                case 'k':
+                    endptr = NULL;
+                    cfg->skew_level = (int) strtoul(optarg, &endptr, 10);
+                    if (cfg->skew_level < 1 || !endptr || *endptr != '\0') {
+                        fprintf(stderr, "error: skew-level must be greater than zero.\n");
+                        return -1;
+                    }
+                    break;
+                case o_server_threads:
+                    endptr = NULL;
+                    cfg->server_threads = (int) strtoul(optarg, &endptr, 10);
+                    if (cfg->server_threads < 1 || !endptr || *endptr != '\0') {
+                        fprintf(stderr, "error: server threads must be greater than zero.\n");
+                        return -1;
+                    }
                     break;
                 case 's':
                     cfg->server = optarg;
@@ -671,9 +690,21 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
     if (cfg->cluster_mode && !verify_cluster_option(cfg))
         return -1;
     if (cfg->blocking) {
-        fprintf(stderr, "In blocking libevent loop mode!\n");
+        fprintf(stderr, "[CONFIG] In blocking libevent loop mode!\n");
     } else {
-        fprintf(stderr, "In non-blocking libevent loop mode!\n");
+        fprintf(stderr, "[CONFIG] In non-blocking libevent loop mode!\n");
+    }
+    if (cfg->skew_level == 0) {
+        cfg->skew_level = 1;
+        cfg->server_threads = std::max(1, cfg->server_threads);
+    } else {
+        if (cfg->server_threads == 0) {
+            fprintf(stderr, "Must set server-threads when using skew level!\n");
+            return -1;
+        } else {
+            fprintf(stderr, "[CONFIG] Skew level: %u, server threads: %u \n",
+                    cfg->skew_level, cfg->server_threads);
+        }
     }
     return 0;
 }
@@ -755,6 +786,13 @@ void usage() {
             "      --num-slaves=RANGE         WAIT for a random number of slaves in the specified range\n"
             "      --wait-timeout=RANGE       WAIT for a random number of milliseconds in the specified range (normal \n"
             "                                 distribution with the center in the middle of the range)"
+            "\n"
+            "BLOCKING Option:\n"
+            "  -b  --blocking                 Run with libevent blocking loop \n"
+            "\n"
+            "SKEWED Option:\n"
+            "  -k  --skew-level               How many clients pileup on memcached's 1st thread \n"
+            "      --sever-threads            How many worker threads used in memcached server \n"
             "\n"
             );
     

@@ -162,6 +162,10 @@ protected:
 
     keylist *m_keylist;                 // used to construct multi commands
 
+    static pthread_mutex_t m_skew_mutex; // used to serialize skewed assignment to memcached server
+    static int skew_count;               // used to count the number of clients
+                                         // piled up on thread "0" for memcached server
+    static int total_conns;              // used to count the total connections to the server
 public:
     client(client_group* group);
     client(struct event_base *event_base, benchmark_config *config, abstract_protocol *protocol, object_generator *obj_gen);

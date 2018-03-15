@@ -51,6 +51,10 @@
 #include "client.h"
 #include "cluster_client.h"
 
+pthread_mutex_t client::m_skew_mutex = PTHREAD_MUTEX_INITIALIZER;
+int client::skew_count = 0;
+int client::total_conns = 0;
+
 float get_2_meaningful_digits(float val)
 {
     float log = floor(log10(val));
@@ -340,12 +344,44 @@ int client::prepare(void)
 {
     if (MAIN_CONNECTION == NULL)
         return -1;
-    
-    int ret = this->connect();
+
+    int ret;
+    shard_connection* sc = MAIN_CONNECTION;
+
+    // Serialize thread creation
+    pthread_mutex_lock(&client::m_skew_mutex);
+    // If we have not achieved the skew level
+    // Then try to pile up thread "0"
+    if (client::skew_count < m_config->skew_level) {
+        while (client::total_conns % m_config->server_threads != 0) {
+            ret = this->connect();
+            if (ret < 0) {
+                continue; // don't count failed creation
+            }
+            // Wait for the socket to be writable, then we can make sure that the
+            // connection is established
+            do {
+                ret = sc->check_sockfd_writable();
+            } while ((ret == -1) && (errno == EINTR));
+
+            // disconnect because we don't want this connection
+            this->disconnect();
+            client::total_conns++;
+        }
+
+        client::skew_count++;
+    }
+
+    ret = this->connect(); // The real connection
     if (ret < 0) {
         benchmark_error_log("prepare: failed to connect, test aborted.\n");
+        pthread_mutex_unlock(&client::m_skew_mutex);
         return ret;
     }
+    fprintf(stderr, "Total connections: %d, server thread: %d \n",
+            client::total_conns, client::total_conns % m_config->server_threads);
+    client::total_conns++;
+    pthread_mutex_unlock(&client::m_skew_mutex);
 
     return 0;
 }
