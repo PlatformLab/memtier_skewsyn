@@ -54,6 +54,7 @@
 pthread_mutex_t client::m_skew_mutex = PTHREAD_MUTEX_INITIALIZER;
 int client::skew_count = 0;
 int client::total_conns = 0;
+int client::real_conns = 0;
 
 float get_2_meaningful_digits(float val)
 {
@@ -378,9 +379,16 @@ int client::prepare(void)
         pthread_mutex_unlock(&client::m_skew_mutex);
         return ret;
     }
-    fprintf(stderr, "Total connections: %d, server thread: %d \n",
-            client::total_conns, client::total_conns % m_config->server_threads);
+    fprintf(stderr, "Total connections: %d, server thread: %d, real conns %d\n",
+            client::total_conns, client::total_conns % m_config->server_threads,
+            client::real_conns);
+
+    client::real_conns++;
     client::total_conns++;
+    if (client::real_conns % m_config->server_threads == 0) {
+        // Reset the skewed counter for the next batch
+        client::skew_count = 0;
+    }
     pthread_mutex_unlock(&client::m_skew_mutex);
 
     return 0;
