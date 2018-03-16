@@ -241,7 +241,6 @@ protected:
     benchmark_config *m_config;
     abstract_protocol* m_protocol;
     object_generator* m_obj_gen;
-    std::vector<client*> m_clients;
 public:
     client_group(benchmark_config *cfg, abstract_protocol *protocol, object_generator* obj_gen);
     ~client_group();
@@ -263,6 +262,7 @@ public:
     unsigned long int get_duration_usec(void);
 
     void merge_run_stats(run_stats* target);
+    std::vector<client*> m_clients;
 };
 
 

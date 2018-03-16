@@ -910,6 +910,23 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     unsigned long int cur_bytes_sec = 0;
     unsigned long int realTotalOps = 0;
 
+    // To collect per-client stats
+    int totalClients = cfg->threads * cfg->clients;
+    unsigned long int *prevOpsPerClient = new unsigned long int[totalClients];
+    unsigned long int *currOpsPerClient = new unsigned long int[totalClients];
+    double *prevLatencyPerClient = new double[totalClients];
+    double *currLatencyPerClient = new double[totalClients];
+
+    unsigned long int *realTotalOpsPerClient = prevOpsPerClient;
+    double *realTotalLatencyPerClient = prevLatencyPerClient;
+
+    unsigned long int *totalOpsPerClient = new unsigned long int[totalClients];
+    double *totalLatencyPerClient = new double[totalClients];
+
+    memset(prevOpsPerClient, 0, totalClients * sizeof(unsigned long int));
+    memset(currOpsPerClient, 0, totalClients * sizeof(unsigned long int));
+    memset(prevLatencyPerClient, 0, totalClients * sizeof(double));
+
     // provide some feedback...
     unsigned int active_threads = 0;
     do {
@@ -921,7 +938,15 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         unsigned long int duration = 0;
         unsigned int thread_counter = 0; 
         unsigned long int total_latency = 0;
+
+        memset(totalOpsPerClient, 0, totalClients * sizeof(unsigned long int));
+        memset(totalLatencyPerClient, 0, totalClients * sizeof(double));
+        int cid = 0; // client id
         
+        gettimeofday(&curstartTime, NULL);
+        double curDuration = (curstartTime.tv_sec - prevstartTime.tv_sec) +
+                             ((curstartTime.tv_usec - prevstartTime.tv_usec) / 1000000.0);
+
         for (std::vector<cg_thread*>::iterator i = threads.begin(); i != threads.end(); i++) {
             if (!(*i)->m_finished)
                 active_threads++;
@@ -932,11 +957,28 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
             thread_counter++;
             float factor = ((float)(thread_counter - 1) / thread_counter);
             duration =  factor * duration +  (float)(*i)->m_cg->get_duration_usec() / thread_counter ;
+
+            // Collect per-client stats
+            for (std::vector<client*>::iterator j = (*i)->m_cg->m_clients.begin();
+                 j != (*i)->m_cg->m_clients.end(); ++j) {
+
+                totalOpsPerClient[cid] = (*j)->get_stats()->get_total_ops();
+                totalLatencyPerClient[cid] = (*j)->get_stats()->get_total_latency();
+
+                currOpsPerClient[cid] = totalOpsPerClient[cid] - prevOpsPerClient[cid];
+                currLatencyPerClient[cid] = (totalLatencyPerClient[cid] - prevLatencyPerClient[cid])
+                                            / currOpsPerClient[cid];
+
+                fprintf(stderr, "Cid: %d, currOps/sec: %.2lf, currLatency: %.4lf us\n",
+                        cid, currOpsPerClient[cid] / curDuration, currLatencyPerClient[cid]);
+
+                prevOpsPerClient[cid] = totalOpsPerClient[cid];
+                prevLatencyPerClient[cid] = totalLatencyPerClient[cid];
+                cid++;
+            }
+
         }
 
-        gettimeofday(&curstartTime, NULL);
-        double curDuration = (curstartTime.tv_sec - prevstartTime.tv_sec) +
-                             ((curstartTime.tv_usec - prevstartTime.tv_usec) / 1000000.0);
         // In order to throw out the last loop
         stopTime = prevstartTime;
         realTotalOps = prev_ops;
@@ -955,7 +997,7 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         unsigned long int bytes_sec = 0;
         double avg_latency = 0;
 
-        double curOpsSec = cur_ops / curDuration;
+        double curOpsSec = cur_ops / curDuration; // Calculate throughput with unified time interval
   
         if (duration > 1) {
             ops_sec = (long)( (double)total_ops / duration * 1000000);
@@ -981,13 +1023,25 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         fprintf(stderr, "[RUN #%u %.0f%%, %3u secs] %2u threads: %11lu ops, %7lu (avg: %7lu) ops/sec, %s/sec (avg: %s/sec), %5.2f (avg: %5.2f) msec latency, real throughput %.2lf ops/sec \r",
             run_id, progress, (unsigned int) (duration / 1000000), active_threads, total_ops, cur_ops_sec, ops_sec, cur_bytes_str, bytes_str, cur_latency, avg_latency, curOpsSec);
 
-        // realTotalOps = prev_ops; // throw out the final loop
     } while (active_threads > 0);
 
     fprintf(stderr, "\n\n");
     double realDuration = (stopTime.tv_sec - startTime.tv_sec) + ((stopTime.tv_usec - startTime.tv_usec) / 1000000.0);
     double realThroughput = realTotalOps / realDuration;
     fprintf(stderr, "Real throughput (ops/sec) is: %.2lf \n", realThroughput);
+
+    // Print per-client stats summary
+    int cid = 0;
+    for (std::vector<cg_thread*>::iterator i = threads.begin(); i != threads.end(); i++) {
+        for (std::vector<client*>::iterator j = (*i)->m_cg->m_clients.begin();
+             j != (*i)->m_cg->m_clients.end(); ++j) {
+            fprintf(stderr, "Cid: %d, Avg Ops/sec: %.2lf, Avg Latency: %.4lf us\n",
+                    cid, realTotalOpsPerClient[cid] / realDuration,
+                    realTotalLatencyPerClient[cid] / realTotalOpsPerClient[cid]);
+            cid++;
+        }
+
+    }
 
     // join all threads back and unify stats
     run_stats stats;
@@ -1015,7 +1069,13 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         threads.erase(threads.begin());
         delete t;
     }
-    
+    delete []prevOpsPerClient;
+    delete []currOpsPerClient;
+    delete []prevLatencyPerClient;
+    delete []currLatencyPerClient;
+    delete []totalOpsPerClient;
+    delete []totalLatencyPerClient;
+
     return stats;
 }
 
