@@ -19,6 +19,7 @@
 #ifndef MEMTIER_BENCHMARK_SHARD_CONNECTION_H
 #define MEMTIER_BENCHMARK_SHARD_CONNECTION_H
 
+#include <poll.h>
 #include <queue>
 #include <netdb.h>
 #include <sys/socket.h>
@@ -116,13 +117,9 @@ public:
         return m_port;
     }
 
-    // Check m_sockfd writable or not
-    int check_sockfd_writable() {
-        fd_set writeset;
-        FD_ZERO(&writeset);
-        FD_SET(m_sockfd, &writeset);
-        return  select(m_sockfd + 1, NULL, &writeset, NULL, NULL);
-    }
+    int check_sockfd_writable();
+    int check_sockfd_readable();
+    void gurantee_sockfd_dispatch();
 
 private:
     void setup_event();

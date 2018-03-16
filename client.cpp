@@ -359,11 +359,9 @@ int client::prepare(void)
             if (ret < 0) {
                 continue; // don't count failed creation
             }
-            // Wait for the socket to be writable, then we can make sure that the
-            // connection is established
-            do {
-                ret = sc->check_sockfd_writable();
-            } while ((ret == -1) && (errno == EINTR));
+
+            // Make sure that we have been dispatched to a thread
+            sc->gurantee_sockfd_dispatch();
 
             // disconnect because we don't want this connection
             this->disconnect();
@@ -379,6 +377,8 @@ int client::prepare(void)
         pthread_mutex_unlock(&client::m_skew_mutex);
         return ret;
     }
+    // XXX: Must make sure that we have been dispatched to a thread
+    sc->gurantee_sockfd_dispatch();
     fprintf(stderr, "Total connections: %d, server thread: %d, real conns %d\n",
             client::total_conns, client::total_conns % m_config->server_threads,
             client::real_conns);

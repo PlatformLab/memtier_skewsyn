@@ -604,3 +604,72 @@ void shard_connection::send_verify_get_command(struct timeval* sent_time, const 
 
     push_req(new verify_request(rt_get, cmd_size, sent_time, 1, key, key_len, value, value_len));
 }
+
+// Check m_sockfd writable or not
+int shard_connection::check_sockfd_writable() {
+    struct pollfd pfd_write;
+    int timeout = 5000;
+    pfd_write.fd = m_sockfd;
+    pfd_write.events = POLLOUT;
+    return ::poll(&pfd_write, 1, timeout);
+}
+
+// Check m_sockfd readable or not
+int shard_connection::check_sockfd_readable() {
+    // Don't use select()! buffer overflow!
+    struct pollfd pfd_read;
+    int timeout = 5000;
+    pfd_read.fd = m_sockfd;
+    pfd_read.events = POLLIN;
+    return ::poll(&pfd_read, 1, timeout);
+}
+
+// Make sure m_sockfd has been dispatched by sending and waiting for a request
+void shard_connection::gurantee_sockfd_dispatch() {
+    // Send out a fake get command
+    int cmd_size = 0;
+    int ret;
+
+    // Make sure socket is writable
+    do {
+        ret = check_sockfd_writable();
+    } while ((ret == -1) && (errno == EINTR));
+
+    cmd_size = m_protocol->write_command_get("test", 4, 0);
+    if (cmd_size < 0) {
+        fprintf(stderr, "cmd_size less than zero! \n");
+        exit(1);
+    }
+    if (evbuffer_get_length(m_write_buf) > 0) {
+        if (evbuffer_write(m_write_buf, m_sockfd) < 0) {
+            if (errno != EWOULDBLOCK) {
+                fprintf(stderr, "write error: %s\n", strerror(errno));
+                disconnect();
+                exit(1);
+            }
+        }
+    }
+
+    // Make sure socket is readable
+    do {
+        ret = check_sockfd_readable();
+    } while ((ret == -1) && (errno == EINTR));
+
+    ret = 1;
+    while (ret > 0) {
+        ret = evbuffer_read(m_read_buf, m_sockfd, -1);
+    }
+
+    if (evbuffer_get_length(m_read_buf) > 0) {
+        ret = m_protocol->parse_response();
+        if (ret == -1) {
+            fprintf(stderr, "error: parsing!\n");
+        }
+    } else {
+        fprintf(stderr, "fail to get response! \n");
+        disconnect();
+        exit(1);
+    }
+    return;
+}
+
