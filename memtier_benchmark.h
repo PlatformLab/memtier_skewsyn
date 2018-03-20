@@ -86,6 +86,7 @@ struct benchmark_config {
     bool blocking;
     int skew_level;
     int server_threads;
+    const char *config_file;
 };
 
 

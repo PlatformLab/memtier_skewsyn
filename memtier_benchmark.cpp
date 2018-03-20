@@ -23,6 +23,7 @@
 #include <chrono>
 #include <iostream>
 #include <pthread.h>
+#include <random>
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -41,7 +42,19 @@
 #include "JSON_handler.h"
 #include "obj_gen.h"
 #include "memtier_benchmark.h"
+#include "PerfUtils/Cycles.h"
 
+using PerfUtils::Cycles;
+
+// To control the distribution of inter-requests time
+enum DistributionType { POISSON, UNIFORM } distType = POISSON;
+
+struct Interval {
+    int64_t timeToRun; // The time (in ns) we spend on this interval
+    double creationsPerSecond;
+} *intervals;
+
+static size_t numIntervals; // Num of intervals in the config file
 
 static int log_level = 0;
 void benchmark_log_file_line(int level, const char *filename, unsigned int line, const char *fmt, ...)
@@ -316,7 +329,8 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         o_wait_timeout, 
         o_json_out_file,
         o_cluster_mode,
-        o_server_threads
+        o_server_threads,
+        o_config_file
     };
     
     static struct option long_options[] = {
@@ -370,6 +384,7 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         { "blocking",                   0, 0, 'b' },
         { "skew-level",                 1, 0, 'k'},
         { "server-threads",             1, 0, o_server_threads },
+        { "config-file",                1, 0, o_config_file},
         { NULL,                         0, 0, 0 }
     };
 
@@ -409,6 +424,9 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
                         fprintf(stderr, "error: server threads must be greater than zero.\n");
                         return -1;
                     }
+                    break;
+                case o_config_file:
+                    cfg->config_file = optarg;
                     break;
                 case 's':
                     cfg->server = optarg;
@@ -701,12 +719,16 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         cfg->server_threads = std::max(1, cfg->server_threads);
     } else {
         if (cfg->server_threads == 0) {
-            fprintf(stderr, "Must set server-threads when using skew level!\n");
+            fprintf(stderr, "ERROR: Must set server-threads when using skew level!\n");
             return -1;
         } else {
             fprintf(stderr, "[CONFIG] Skew level: %u, server threads: %u \n",
                     cfg->skew_level, cfg->server_threads);
         }
+    }
+    if (cfg->config_file == NULL) {
+        fprintf(stderr, "ERROR: Please specify a configuration file!\n");
+        return -1;
     }
     return 0;
 }
@@ -877,17 +899,133 @@ void size_to_str(unsigned long int size, char *buf, int buf_len)
     }    
 }
 
+static int parse_config_file(const char* config_file) {
+    FILE* specFile = fopen(config_file, "r");
+    if (!specFile) {
+        fprintf(stderr, "Configuration file '%s' non existent! \n", config_file);
+        return -1;
+    }
+    char buffer[1024];
+    if (fgets(buffer, 1024, specFile) == NULL) {
+        fprintf(stderr, "Error reading configuration file: %s\n", strerror(errno));
+        return -1;
+    }
+    sscanf(buffer, "%zu", &numIntervals);
+    intervals = new Interval[numIntervals];
+
+    for (size_t i = 0; i < numIntervals; ++i) {
+        if (fgets(buffer, 1024, specFile) == NULL) {
+            fprintf(stderr, "Error reading configuration file: %s\n", strerror(errno));
+            return -1;
+        }
+        sscanf(buffer, "%ld %lf", &intervals[i].timeToRun,
+               &intervals[i].creationsPerSecond);
+    }
+    fclose(specFile);
+    return 0;
+}
+
 static void* start_master(void *arg) {
-    using namespace std::chrono;
     fprintf(stderr, "Start the master!\n");
     benchmark_config *cfg = (benchmark_config*)arg;
-    high_resolution_clock::time_point begin = high_resolution_clock::now();
-    sleep(1);
-    high_resolution_clock::time_point end = high_resolution_clock::now();
-    std::cout << "Current time is: " <<
-    duration_cast<std::chrono::nanoseconds>(end-begin).count() <<
-    "ns " << duration_cast<std::chrono::seconds>(end-begin).count() <<
-    "sec" << std::endl;
+    if (parse_config_file(cfg->config_file) < 0) {
+        fprintf(stderr, "ERROR: fail to read config file \n");
+        exit(1);
+    }
+
+    fprintf(stderr, "Num of intervals: %zu \n", numIntervals);
+
+    // Initialize interval index
+    size_t currentInterval = 0;
+
+    // Start the DCFT-style loop
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    std::exponential_distribution<double> intervalGenerator(
+        intervals[currentInterval].creationsPerSecond);
+    // We want the average value to be consistent with the expectation
+    // So we need to use 2.0 instead of 1.0
+    std::uniform_real_distribution<> uniformIG(
+        0, 2.0 / intervals[currentInterval].creationsPerSecond);
+
+    uint64_t nextCycleTime;
+    switch (distType) {
+        case POISSON:
+            nextCycleTime =
+                Cycles::rdtsc() + Cycles::fromSeconds(intervalGenerator(gen));
+            break;
+        case UNIFORM:
+            nextCycleTime =
+                Cycles::rdtsc() + Cycles::fromSeconds(uniformIG(gen));
+    }
+
+    uint64_t currentTime = Cycles::rdtsc();
+
+    uint64_t nextIntervalTime =
+        currentTime +
+        Cycles::fromNanoseconds(intervals[currentInterval].timeToRun);
+
+    int64_t reqsCount = 0;
+    int64_t shouldCount = 0;
+    shouldCount += intervals[currentInterval].creationsPerSecond *
+        (intervals[currentInterval].timeToRun / 1000000000);
+    for (;; currentTime = Cycles::rdtsc()) {
+        if (nextCycleTime < currentTime) {
+            // fprintf(stderr, "Sending out %ld requests \n", reqsCount);
+            reqsCount++;
+
+            switch (distType) {
+                case POISSON:
+                    nextCycleTime = nextCycleTime +
+                        Cycles::fromSeconds(intervalGenerator(gen));
+                    break;
+                case UNIFORM:
+                    nextCycleTime = nextCycleTime +
+                        Cycles::fromSeconds(uniformIG(gen));
+            }
+
+            // Trying to send out as fast as possible when we are not meeting
+            // the threshold
+            if (nextCycleTime < currentTime) {
+                nextCycleTime = currentTime;
+                // fprintf(stderr, "Cannot meet the speed\n");
+            }
+        }
+
+        if (nextIntervalTime < currentTime) {
+            // Advance the interval
+            currentInterval++;
+            if (currentInterval == numIntervals)
+                break;
+            nextIntervalTime =
+                currentTime +
+                Cycles::fromNanoseconds(intervals[currentInterval].timeToRun);
+            switch (distType) {
+                case POISSON:
+                    intervalGenerator.param(
+                        std::exponential_distribution<double>::param_type(
+                            intervals[currentInterval].creationsPerSecond));
+                    nextCycleTime = Cycles::rdtsc() +
+                        Cycles::fromSeconds(intervalGenerator(gen));
+
+                    break;
+                case UNIFORM:
+                    uniformIG.param(
+                        std::uniform_real_distribution<double>::param_type(
+                        0,
+                        2.0 /
+                            intervals[currentInterval].creationsPerSecond));
+                    nextCycleTime =
+                        Cycles::rdtsc() + Cycles::fromSeconds(uniformIG(gen));
+            }
+            shouldCount += intervals[currentInterval].creationsPerSecond *
+                (intervals[currentInterval].timeToRun / 1000000000);
+        }
+    }
+
+    fprintf(stderr, "[STATS] should run %ld reqs, actually send out %ld reqs\n",
+            shouldCount, reqsCount);
     return NULL;
 }
 
@@ -898,6 +1036,7 @@ static void join_master(pthread_t tid) {
     ret = pthread_join(tid, (void **)&retval);
     assert(ret == 0);
 
+    delete []intervals;
     fprintf(stderr, "Shutdown the master!\n");
     return;
 }

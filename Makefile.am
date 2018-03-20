@@ -21,6 +21,8 @@ EXTRA_DIST = README.md COPYING
 
 bin_PROGRAMS = memtier_benchmark
 
+INCLUDES = -Iarachne-all/PerfUtils/include
+
 memtier_benchmark_CPPFLAGS = $(LIBEVENT_CFLAGS) -DNPER_CLIENT
 memtier_benchmark_SOURCES = \
 	memtier_benchmark.cpp memtier_benchmark.h \
@@ -33,7 +35,8 @@ memtier_benchmark_SOURCES = \
 	item.cpp item.h \
 	file_io.cpp file_io.h \
 	config_types.cpp config_types.h
-memtier_benchmark_LDADD = $(LIBEVENT_LIBS)
+memtier_benchmark_LDADD = $(LIBEVENT_LIBS) \
+    -Larachne-all/PerfUtils/lib -lPerfUtils
 
 dist_man1_MANS = memtier_benchmark.1
 
