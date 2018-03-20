@@ -227,10 +227,15 @@ int client::connect(void)
 
 bool client::finished(void)
 {
-    if (m_config->requests > 0 && m_reqs_processed >= m_config->requests)
+    if (!master_finished) {
+        return false;
+    } else {
         return true;
-    if (m_config->test_time > 0 && m_stats.get_duration() >= m_config->test_time)
-        return true;
+    }
+//    if (m_config->requests > 0 && m_reqs_processed >= m_config->requests)
+//        return true;
+//    if (m_config->test_time > 0 && m_stats.get_duration() >= m_config->test_time)
+//        return true;
     return false;    
 }
 
@@ -533,7 +538,11 @@ bool verify_client::finished(void)
 client_group::client_group(benchmark_config* config, abstract_protocol *protocol, object_generator* obj_gen) : 
     m_base(NULL), m_config(config), m_protocol(protocol), m_obj_gen(obj_gen)
 {
-    m_base = event_base_new();
+    struct event_config *ev_config;
+    ev_config = event_config_new();
+    event_config_set_flag(ev_config, EVENT_BASE_FLAG_NOLOCK);
+    m_base = event_base_new_with_config(ev_config);
+    event_config_free(ev_config);
     assert(m_base != NULL);
 
     assert(protocol != NULL);

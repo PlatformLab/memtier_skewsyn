@@ -46,6 +46,10 @@
 
 using PerfUtils::Cycles;
 
+bool master_finished = false;
+std::atomic<int> outReqs;
+std::atomic<uint64_t> realSendReqsCount;
+
 // To control the distribution of inter-requests time
 enum DistributionType { POISSON, UNIFORM } distType = POISSON;
 
@@ -974,6 +978,7 @@ static void* start_master(void *arg) {
         if (nextCycleTime < currentTime) {
             // fprintf(stderr, "Sending out %ld requests \n", reqsCount);
             reqsCount++;
+            outReqs.fetch_add(1, std::memory_order::memory_order_relaxed);
 
             switch (distType) {
                 case POISSON:
@@ -996,6 +1001,7 @@ static void* start_master(void *arg) {
         if (nextIntervalTime < currentTime) {
             // Advance the interval
             currentInterval++;
+            outReqs.store(0);
             if (currentInterval == numIntervals)
                 break;
             nextIntervalTime =
@@ -1024,8 +1030,10 @@ static void* start_master(void *arg) {
         }
     }
 
-    fprintf(stderr, "[STATS] should run %ld reqs, actually send out %ld reqs\n",
-            shouldCount, reqsCount);
+    master_finished = true;
+    fprintf(stderr, "[STATS] should run %ld reqs, actually issue %ld reqs, "
+            "actually send out %ld reqs \n",
+            shouldCount, reqsCount, realSendReqsCount.load());
     return NULL;
 }
 
@@ -1264,6 +1272,10 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
 int main(int argc, char *argv[])
 {
     struct benchmark_config cfg;
+
+    master_finished = false;
+    outReqs.store(0);
+    realSendReqsCount.store(0);
 
     memset(&cfg, 0, sizeof(struct benchmark_config));
     if (config_parse_args(argc, argv, &cfg) < 0) {

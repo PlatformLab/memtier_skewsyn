@@ -19,6 +19,7 @@
 #ifndef _MEMTIER_BENCHMARK_H
 #define _MEMTIER_BENCHMARK_H
 
+#include <atomic>
 #include <vector>
 #include "config_types.h"
 
@@ -92,6 +93,10 @@ struct benchmark_config {
 
 extern void benchmark_log_file_line(int level, const char *filename, unsigned int line, const char *fmt, ...);
 extern void benchmark_log(int level, const char *fmt, ...);
+
+extern bool master_finished; // master thread finished or not?
+extern std::atomic<int> outReqs; // Outstanding requests
+extern std::atomic<uint64_t> realSendReqsCount; // Real send out requests
 
 #endif /* _MEMTIER_BENCHMARK_H */
 

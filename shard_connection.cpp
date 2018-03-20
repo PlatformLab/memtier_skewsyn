@@ -435,6 +435,7 @@ void shard_connection::fill_pipeline(void)
     struct timeval now;
     gettimeofday(&now, NULL);
 
+
     while (!m_conns_manager->finished() && m_pipeline->size() < m_config->pipeline) {
         if (!is_conn_setup_done()) {
             send_conn_setup_commands(now);
@@ -445,8 +446,17 @@ void shard_connection::fill_pipeline(void)
         if (m_conns_manager->hold_pipeline(m_id))
             break;
 
+        // Check the ourReqs to decide whether or not to send out request
+        int ret = outReqs.fetch_sub(1, std::memory_order::memory_order_relaxed);
+        // fprintf(stderr, "try to fill pipeline, outReqs %d\n", ret);
+
+        if (ret <= 0) {
+            outReqs++;
+            return;
+        }
         // client manage requests logic
         m_conns_manager->create_request(now, m_id);
+        realSendReqsCount.fetch_add(1, std::memory_order::memory_order_relaxed);
     }
 }
 
@@ -521,14 +531,24 @@ void shard_connection::handle_event(short evtype)
         }
     }
 
-    // update event
+    // Send out request when witable
+    if ((evtype & EV_WRITE) == EV_WRITE) {
+        fill_pipeline();
+    }
+
+    // update event, because it is non-persistent!
     short new_evtype = 0;
     if (m_pending_resp) {
         new_evtype = EV_READ;
     }
 
-    if (evbuffer_get_length(m_write_buf) > 0) {
-        assert(!m_conns_manager->finished());
+//    if (evbuffer_get_length(m_write_buf) > 0) {
+//        assert(!m_conns_manager->finished());
+//        new_evtype |= EV_WRITE;
+//    }
+
+    // Always update to write!
+    if (!m_conns_manager->finished()) {
         new_evtype |= EV_WRITE;
     }
 
@@ -540,6 +560,7 @@ void shard_connection::handle_event(short evtype)
         ret = event_add(m_event, NULL);
         assert(ret == 0);
     } else if (m_conns_manager->finished()) {
+        // fprintf(stderr, "master finished!\n");
         m_conns_manager->set_end_time();
     }
 }
