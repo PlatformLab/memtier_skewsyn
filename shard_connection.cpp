@@ -422,6 +422,7 @@ void shard_connection::process_response(void)
         }
     }
 
+    // Send out request after processing the response
     fill_pipeline();
 }
 
@@ -448,15 +449,36 @@ void shard_connection::fill_pipeline(void)
 
         // Check the ourReqs to decide whether or not to send out request
         int ret = outReqs.fetch_sub(1);
-        // fprintf(stderr, "try to fill pipeline, outReqs %d\n", ret);
-
         if (ret <= 0) {
+            // If it is not our turn, then just break the loop.
             outReqs++;
             return;
         }
         // client manage requests logic
         m_conns_manager->create_request(now, m_id);
         realIssueCount.fetch_add(1);
+
+        // Send out here!
+        if (evbuffer_get_length(m_write_buf) > 0) {
+            // Make sure socket is writable
+            do {
+                ret = check_sockfd_writable();
+            } while ((ret == -1) && (errno == EINTR));
+
+            if (evbuffer_write(m_write_buf, m_sockfd) < 0) {
+                if (errno != EWOULDBLOCK) {
+                    benchmark_error_log("write error: %s\n", strerror(errno));
+                    disconnect();
+
+                    return;
+                }
+                realSendReqsCount.fetch_add(1);
+            }
+            else {
+                realSendReqsCount.fetch_add(1);
+            }
+        }
+
     }
 }
 
@@ -489,20 +511,20 @@ void shard_connection::handle_event(short evtype)
     }
 
     assert(m_connected == true);
-    if ((evtype & EV_WRITE) == EV_WRITE && evbuffer_get_length(m_write_buf) > 0) {
-        if (evbuffer_write(m_write_buf, m_sockfd) < 0) {
-            if (errno != EWOULDBLOCK) {
-                benchmark_error_log("write error: %s\n", strerror(errno));
-                disconnect();
-
-                return;
-            }
-            realSendReqsCount.fetch_add(1);
-        }
-        else {
-            realSendReqsCount.fetch_add(1);
-        }
-    }
+//    if ((evtype & EV_WRITE) == EV_WRITE && evbuffer_get_length(m_write_buf) > 0) {
+//        if (evbuffer_write(m_write_buf, m_sockfd) < 0) {
+//            if (errno != EWOULDBLOCK) {
+//                benchmark_error_log("write error: %s\n", strerror(errno));
+//                disconnect();
+//
+//                return;
+//            }
+//            realSendReqsCount.fetch_add(1);
+//        }
+//        else {
+//            realSendReqsCount.fetch_add(1);
+//        }
+//    }
 
     if ((evtype & EV_READ) == EV_READ) {
         int ret = 1;
@@ -535,7 +557,7 @@ void shard_connection::handle_event(short evtype)
         }
     }
 
-    // Send out request when witable
+    // Send out request when writable
     if ((evtype & EV_WRITE) == EV_WRITE) {
         fill_pipeline();
     }
@@ -564,7 +586,6 @@ void shard_connection::handle_event(short evtype)
         ret = event_add(m_event, NULL);
         assert(ret == 0);
     } else if (m_conns_manager->finished()) {
-        // fprintf(stderr, "master finished!\n");
         m_conns_manager->set_end_time();
     }
 }

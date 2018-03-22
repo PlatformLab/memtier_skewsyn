@@ -227,6 +227,7 @@ int client::connect(void)
 
 bool client::finished(void)
 {
+    // Finish when the master finished
     if (!master_finished) {
         return false;
     } else {

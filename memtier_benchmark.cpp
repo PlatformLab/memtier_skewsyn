@@ -53,7 +53,7 @@ std::atomic<uint64_t> realResponseCount;
 std::atomic<uint64_t> realIssueCount;
 
 // To control the distribution of inter-requests time
-enum DistributionType { POISSON, UNIFORM } distType = UNIFORM;
+enum DistributionType { POISSON, UNIFORM } distType = POISSON;
 
 struct Interval {
     int64_t timeToRun; // The time (in ns) we spend on this interval
