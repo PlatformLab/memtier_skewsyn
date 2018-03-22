@@ -556,7 +556,7 @@ void shard_connection::handle_event(short evtype)
         new_evtype |= EV_WRITE;
     }
 
-    if (new_evtype) {
+    if ((new_evtype) && !m_conns_manager->finished()) {
         int ret = event_assign(m_event, m_event_base,
                                m_sockfd, new_evtype, cluster_client_event_handler, (void *)this);
         assert(ret == 0);
