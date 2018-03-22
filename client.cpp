@@ -340,10 +340,13 @@ void client::create_request(struct timeval timestamp, unsigned int conn_id)
             m_reqs_generated++;
             m_get_ratio_count++;
         }
-    } else {
-        // overlap counters
+    }
+
+    // Overlap counters
+    if ((m_set_ratio_count == m_config->ratio.a) ||
+        (m_get_ratio_count == m_config->ratio.b)) {
         m_get_ratio_count = m_set_ratio_count = 0;
-    }        
+    }
 }
 
 int client::prepare(void)

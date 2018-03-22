@@ -97,6 +97,8 @@ extern void benchmark_log(int level, const char *fmt, ...);
 extern bool master_finished; // master thread finished or not?
 extern std::atomic<int> outReqs; // Outstanding requests
 extern std::atomic<uint64_t> realSendReqsCount; // Real send out requests
+extern std::atomic<uint64_t> realResponseCount; // Real num of responses we get
+extern std::atomic<uint64_t> realIssueCount; // Real issued requests (write to buffer)
 
 #endif /* _MEMTIER_BENCHMARK_H */
 

@@ -49,9 +49,11 @@ using PerfUtils::Cycles;
 bool master_finished = false;
 std::atomic<int> outReqs;
 std::atomic<uint64_t> realSendReqsCount;
+std::atomic<uint64_t> realResponseCount;
+std::atomic<uint64_t> realIssueCount;
 
 // To control the distribution of inter-requests time
-enum DistributionType { POISSON, UNIFORM } distType = POISSON;
+enum DistributionType { POISSON, UNIFORM } distType = UNIFORM;
 
 struct Interval {
     int64_t timeToRun; // The time (in ns) we spend on this interval
@@ -1031,9 +1033,12 @@ static void* start_master(void *arg) {
     }
 
     master_finished = true;
-    fprintf(stderr, "[STATS] should run %ld reqs, actually issue %ld reqs, "
-            "actually send out %ld reqs \n",
-            shouldCount, reqsCount, realSendReqsCount.load());
+    fprintf(stderr, "[STATS] should run %ld reqs, master issue %ld reqs, "
+            "clients actually issue %ld reqs, "
+            "actually send out %ld reqs, actuall responses %ld \n",
+            shouldCount, reqsCount, realIssueCount.load(),
+            realSendReqsCount.load(),
+            realResponseCount.load());
     return NULL;
 }
 
@@ -1276,6 +1281,8 @@ int main(int argc, char *argv[])
     master_finished = false;
     outReqs.store(0);
     realSendReqsCount.store(0);
+    realResponseCount.store(0);
+    realIssueCount.store(0);
 
     memset(&cfg, 0, sizeof(struct benchmark_config));
     if (config_parse_args(argc, argv, &cfg) < 0) {

@@ -305,7 +305,7 @@ request* shard_connection::pop_req() {
 
     m_pending_resp--;
     assert(m_pending_resp >= 0);
-
+    realResponseCount.fetch_add(1);
     return req;
 }
 
@@ -447,7 +447,7 @@ void shard_connection::fill_pipeline(void)
             break;
 
         // Check the ourReqs to decide whether or not to send out request
-        int ret = outReqs.fetch_sub(1, std::memory_order::memory_order_relaxed);
+        int ret = outReqs.fetch_sub(1);
         // fprintf(stderr, "try to fill pipeline, outReqs %d\n", ret);
 
         if (ret <= 0) {
@@ -456,7 +456,7 @@ void shard_connection::fill_pipeline(void)
         }
         // client manage requests logic
         m_conns_manager->create_request(now, m_id);
-        realSendReqsCount.fetch_add(1, std::memory_order::memory_order_relaxed);
+        realIssueCount.fetch_add(1);
     }
 }
 
@@ -497,6 +497,10 @@ void shard_connection::handle_event(short evtype)
 
                 return;
             }
+            realSendReqsCount.fetch_add(1);
+        }
+        else {
+            realSendReqsCount.fetch_add(1);
         }
     }
 
@@ -596,6 +600,9 @@ void shard_connection::send_get_command(struct timeval* sent_time,
     cmd_size = m_protocol->write_command_get(key, key_len, offset);
 
     push_req(new request(rt_get, cmd_size, sent_time, 1));
+
+    // realIssueCount.fetch_add(1);
+
 }
 
 void shard_connection::send_mget_command(struct timeval* sent_time, const keylist* key_list) {
