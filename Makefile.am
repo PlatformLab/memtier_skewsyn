@@ -34,7 +34,8 @@ memtier_benchmark_SOURCES = \
 	obj_gen.cpp obj_gen.h \
 	item.cpp item.h \
 	file_io.cpp file_io.h \
-	config_types.cpp config_types.h
+	config_types.cpp config_types.h \
+    generator.cpp generator.h
 memtier_benchmark_LDADD = $(LIBEVENT_LIBS) \
     -Larachne-all/PerfUtils/lib -lPerfUtils
 

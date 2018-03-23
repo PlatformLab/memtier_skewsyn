@@ -22,6 +22,8 @@
 #include <atomic>
 #include <vector>
 #include "config_types.h"
+#include "generator.h"
+#include "PerfUtils/Cycles.h"
 
 #define LOGLEVEL_ERROR 0
 #define LOGLEVEL_DEBUG 1
@@ -99,6 +101,7 @@ extern std::atomic<int> outReqs; // Outstanding requests
 extern std::atomic<uint64_t> realSendReqsCount; // Real send out requests
 extern std::atomic<uint64_t> realResponseCount; // Real num of responses we get
 extern std::atomic<uint64_t> realIssueCount; // Real issued requests (write to buffer)
+extern enum DistributionType distType;  // Distribution type of inter-reqs time
 
 #endif /* _MEMTIER_BENCHMARK_H */
 

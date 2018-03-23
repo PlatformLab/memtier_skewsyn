@@ -42,7 +42,6 @@
 #include "JSON_handler.h"
 #include "obj_gen.h"
 #include "memtier_benchmark.h"
-#include "PerfUtils/Cycles.h"
 
 using PerfUtils::Cycles;
 
@@ -53,7 +52,7 @@ std::atomic<uint64_t> realResponseCount;
 std::atomic<uint64_t> realIssueCount;
 
 // To control the distribution of inter-requests time
-enum DistributionType { POISSON, UNIFORM } distType = POISSON;
+DistributionType distType = POISSON;
 
 struct Interval {
     int64_t timeToRun; // The time (in ns) we spend on this interval
@@ -945,25 +944,22 @@ static void* start_master(void *arg) {
     size_t currentInterval = 0;
 
     // Start the DCFT-style loop
-    std::random_device rd;
-    std::mt19937 gen(rd());
-
-    std::exponential_distribution<double> intervalGenerator(
-        intervals[currentInterval].creationsPerSecond);
+    Poisson intervalGenerator(intervals[currentInterval].creationsPerSecond);
     // We want the average value to be consistent with the expectation
     // So we need to use 2.0 instead of 1.0
-    std::uniform_real_distribution<> uniformIG(
-        0, 2.0 / intervals[currentInterval].creationsPerSecond);
-
+    Uniform uniformIG(intervals[currentInterval].creationsPerSecond);
     uint64_t nextCycleTime;
     switch (distType) {
         case POISSON:
+            fprintf(stderr, "Poisson distribution! \n");
             nextCycleTime =
-                Cycles::rdtsc() + Cycles::fromSeconds(intervalGenerator(gen));
+                Cycles::rdtsc() +
+                Cycles::fromSeconds(intervalGenerator.generate());
             break;
         case UNIFORM:
+            fprintf(stderr, "Uniform distribution! \n");
             nextCycleTime =
-                Cycles::rdtsc() + Cycles::fromSeconds(uniformIG(gen));
+                Cycles::rdtsc() + Cycles::fromSeconds(uniformIG.generate());
     }
 
     uint64_t currentTime = Cycles::rdtsc();
@@ -978,25 +974,23 @@ static void* start_master(void *arg) {
         (intervals[currentInterval].timeToRun / 1000000000);
     for (;; currentTime = Cycles::rdtsc()) {
         if (nextCycleTime < currentTime) {
-            // fprintf(stderr, "Sending out %ld requests \n", reqsCount);
             reqsCount++;
             outReqs.fetch_add(1, std::memory_order::memory_order_relaxed);
 
             switch (distType) {
                 case POISSON:
                     nextCycleTime = nextCycleTime +
-                        Cycles::fromSeconds(intervalGenerator(gen));
+                        Cycles::fromSeconds(intervalGenerator.generate());
                     break;
                 case UNIFORM:
                     nextCycleTime = nextCycleTime +
-                        Cycles::fromSeconds(uniformIG(gen));
+                        Cycles::fromSeconds(uniformIG.generate());
             }
 
             // Trying to send out as fast as possible when we are not meeting
             // the threshold
             if (nextCycleTime < currentTime) {
                 nextCycleTime = currentTime;
-                // fprintf(stderr, "Cannot meet the speed\n");
             }
         }
 
@@ -1011,21 +1005,18 @@ static void* start_master(void *arg) {
                 Cycles::fromNanoseconds(intervals[currentInterval].timeToRun);
             switch (distType) {
                 case POISSON:
-                    intervalGenerator.param(
-                        std::exponential_distribution<double>::param_type(
-                            intervals[currentInterval].creationsPerSecond));
+                    intervalGenerator.set_lambda(
+                            intervals[currentInterval].creationsPerSecond);
                     nextCycleTime = Cycles::rdtsc() +
-                        Cycles::fromSeconds(intervalGenerator(gen));
+                        Cycles::fromSeconds(intervalGenerator.generate());
 
                     break;
                 case UNIFORM:
-                    uniformIG.param(
-                        std::uniform_real_distribution<double>::param_type(
-                        0,
-                        2.0 /
-                            intervals[currentInterval].creationsPerSecond));
+                    uniformIG.set_lambda(
+                        intervals[currentInterval].creationsPerSecond);
                     nextCycleTime =
-                        Cycles::rdtsc() + Cycles::fromSeconds(uniformIG(gen));
+                        Cycles::rdtsc() +
+                        Cycles::fromSeconds(uniformIG.generate());
             }
             shouldCount += intervals[currentInterval].creationsPerSecond *
                 (intervals[currentInterval].timeToRun / 1000000000);
