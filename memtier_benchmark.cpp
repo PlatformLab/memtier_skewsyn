@@ -52,7 +52,7 @@ std::atomic<uint64_t> realResponseCount;
 std::atomic<uint64_t> realIssueCount;
 
 // To control the distribution of inter-requests time
-DistributionType distType = POISSON;
+DistributionType distType = NONE;
 
 struct Interval {
     int64_t timeToRun; // The time (in ns) we spend on this interval
@@ -947,6 +947,10 @@ static void* start_master(void *arg) {
     Generator* intervalGenerator;
     uint64_t nextCycleTime;
     switch (distType) {
+        case NONE:
+            fprintf(stderr, "No inter-request time! \n");
+            intervalGenerator = new Generator();
+            break;
         case POISSON:
             fprintf(stderr, "Poisson distribution! \n");
             intervalGenerator =

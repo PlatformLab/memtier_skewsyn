@@ -10,7 +10,7 @@
 #include <string.h>
 #include <unistd.h>
 
-enum DistributionType { POISSON = 0, UNIFORM };
+enum DistributionType { NONE = 0, POISSON, UNIFORM };
 extern std::random_device rd;
 
 // Generator types are based on distribution type
@@ -22,8 +22,8 @@ class Generator {
     virtual ~Generator() {}
 
     virtual double generate() { return 0.0; }
-    virtual void set_lambda(double lambda) = 0;
-    virtual double get_lambda() = 0;
+    virtual void set_lambda(double lambda) {}
+    virtual double get_lambda() { return 0.0; }
 };
 
 // Poisson distribution, lambda is creations per second
