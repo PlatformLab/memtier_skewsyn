@@ -39,6 +39,8 @@ class Poisson : public Generator {
     }
 
     virtual void set_lambda(double lambda) override {
+        if (this->lambda == lambda)
+            return;
         this->lambda = lambda;
         if (lambda > 0.0) {
             this->expIG.param(
@@ -55,6 +57,8 @@ class Poisson : public Generator {
 };
 
 // Uniform distribution, lambda is creations per second
+// We want the average value to be consistent with the expectation
+// So we need to use 2.0 instead of 1.0 when setting max value.
 class Uniform : public Generator {
   public:
     Uniform(double _lambda = 1.0)
@@ -67,6 +71,8 @@ class Uniform : public Generator {
     }
 
     virtual void set_lambda(double lambda) override {
+        if (this->lambda == lambda)
+            return;
         this->lambda = lambda;
         if (lambda > 0.0) {
             this->uniformIG.param(

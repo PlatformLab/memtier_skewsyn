@@ -944,23 +944,22 @@ static void* start_master(void *arg) {
     size_t currentInterval = 0;
 
     // Start the DCFT-style loop
-    Poisson intervalGenerator(intervals[currentInterval].creationsPerSecond);
-    // We want the average value to be consistent with the expectation
-    // So we need to use 2.0 instead of 1.0
-    Uniform uniformIG(intervals[currentInterval].creationsPerSecond);
+    Generator* intervalGenerator;
     uint64_t nextCycleTime;
     switch (distType) {
         case POISSON:
             fprintf(stderr, "Poisson distribution! \n");
-            nextCycleTime =
-                Cycles::rdtsc() +
-                Cycles::fromSeconds(intervalGenerator.generate());
+            intervalGenerator =
+                new Poisson(intervals[currentInterval].creationsPerSecond);
             break;
         case UNIFORM:
             fprintf(stderr, "Uniform distribution! \n");
-            nextCycleTime =
-                Cycles::rdtsc() + Cycles::fromSeconds(uniformIG.generate());
+            intervalGenerator =
+                new Uniform(intervals[currentInterval].creationsPerSecond);
     }
+    nextCycleTime =
+        Cycles::rdtsc() +
+        Cycles::fromSeconds(intervalGenerator->generate());
 
     uint64_t currentTime = Cycles::rdtsc();
 
@@ -977,15 +976,8 @@ static void* start_master(void *arg) {
             reqsCount++;
             outReqs.fetch_add(1, std::memory_order::memory_order_relaxed);
 
-            switch (distType) {
-                case POISSON:
-                    nextCycleTime = nextCycleTime +
-                        Cycles::fromSeconds(intervalGenerator.generate());
-                    break;
-                case UNIFORM:
-                    nextCycleTime = nextCycleTime +
-                        Cycles::fromSeconds(uniformIG.generate());
-            }
+            nextCycleTime = nextCycleTime +
+                Cycles::fromSeconds(intervalGenerator->generate());
 
             // Trying to send out as fast as possible when we are not meeting
             // the threshold
@@ -1003,21 +995,12 @@ static void* start_master(void *arg) {
             nextIntervalTime =
                 currentTime +
                 Cycles::fromNanoseconds(intervals[currentInterval].timeToRun);
-            switch (distType) {
-                case POISSON:
-                    intervalGenerator.set_lambda(
-                            intervals[currentInterval].creationsPerSecond);
-                    nextCycleTime = Cycles::rdtsc() +
-                        Cycles::fromSeconds(intervalGenerator.generate());
 
-                    break;
-                case UNIFORM:
-                    uniformIG.set_lambda(
-                        intervals[currentInterval].creationsPerSecond);
-                    nextCycleTime =
-                        Cycles::rdtsc() +
-                        Cycles::fromSeconds(uniformIG.generate());
-            }
+            intervalGenerator->set_lambda(
+                intervals[currentInterval].creationsPerSecond);
+            nextCycleTime = Cycles::rdtsc() +
+                Cycles::fromSeconds(intervalGenerator->generate());
+
             shouldCount += intervals[currentInterval].creationsPerSecond *
                 (intervals[currentInterval].timeToRun / 1000000000);
         }
@@ -1030,6 +1013,7 @@ static void* start_master(void *arg) {
             shouldCount, reqsCount, realIssueCount.load(),
             realSendReqsCount.load(),
             realResponseCount.load());
+    delete intervalGenerator;
     return NULL;
 }
 
