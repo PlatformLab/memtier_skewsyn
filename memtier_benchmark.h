@@ -97,11 +97,8 @@ extern void benchmark_log_file_line(int level, const char *filename, unsigned in
 extern void benchmark_log(int level, const char *fmt, ...);
 
 extern bool master_finished; // master thread finished or not?
-extern std::atomic<int> outReqs; // Outstanding requests
-extern std::atomic<uint64_t> realSendReqsCount; // Real send out requests
-extern std::atomic<uint64_t> realResponseCount; // Real num of responses we get
-extern std::atomic<uint64_t> realIssueCount; // Real issued requests (write to buffer)
 extern enum DistributionType distType;  // Distribution type of inter-reqs time
+extern std::vector<double> qpsPerClient;
 
 #endif /* _MEMTIER_BENCHMARK_H */
 

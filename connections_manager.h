@@ -38,6 +38,7 @@ public:
 
     virtual int connect(void) = 0;
     virtual void disconnect(void) = 0;
+
 };
 
 

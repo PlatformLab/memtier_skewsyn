@@ -28,6 +28,7 @@
 #include <event2/buffer.h>
 
 #include "protocol.h"
+#include "generator.h"
 
 // forward decleration
 class connections_manager;
@@ -121,6 +122,12 @@ public:
     int check_sockfd_readable();
     void gurantee_sockfd_dispatch();
 
+    int serverTid;                      // server thread id it connected to
+    Generator* intervalGenerator;       // used to generate the intervals
+                                        // between requests. Set qps for this
+                                        // client based on qpsPerClient[serverTid]
+    uint64_t nextCycleTime;             // next time to issue a request
+
 private:
     void setup_event();
     int setup_socket(struct connect_info* addr);
@@ -161,6 +168,7 @@ private:
     enum authentication_state m_authentication;
     enum select_db_state m_db_selection;
     enum cluster_slots_state m_cluster_slots;
+
 };
 
 #endif //MEMTIER_BENCHMARK_SHARD_CONNECTION_H

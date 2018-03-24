@@ -46,17 +46,16 @@
 using PerfUtils::Cycles;
 
 bool master_finished = false;
-std::atomic<int> outReqs;
-std::atomic<uint64_t> realSendReqsCount;
-std::atomic<uint64_t> realResponseCount;
-std::atomic<uint64_t> realIssueCount;
 
 // To control the distribution of inter-requests time
-DistributionType distType = NONE;
+DistributionType distType = POISSON;
+
+// QPS for each clieint on each server thread
+std::vector<double> qpsPerClient;
 
 struct Interval {
     int64_t timeToRun; // The time (in ns) we spend on this interval
-    double creationsPerSecond;
+    double requestsPerSecond;
 } *intervals;
 
 static size_t numIntervals; // Num of intervals in the config file
@@ -904,7 +903,8 @@ void size_to_str(unsigned long int size, char *buf, int buf_len)
     }    
 }
 
-static int parse_config_file(const char* config_file) {
+static int parse_config_file(benchmark_config *cfg) {
+    const char* config_file = cfg->config_file;
     FILE* specFile = fopen(config_file, "r");
     if (!specFile) {
         fprintf(stderr, "Configuration file '%s' non existent! \n", config_file);
@@ -924,19 +924,29 @@ static int parse_config_file(const char* config_file) {
             return -1;
         }
         sscanf(buffer, "%ld %lf", &intervals[i].timeToRun,
-               &intervals[i].creationsPerSecond);
+               &intervals[i].requestsPerSecond);
     }
     fclose(specFile);
+
+    // Initialize per client qps
+    int numServerThreads = cfg->server_threads;
+    int numClients = cfg->threads * cfg->clients;
+
+    // Evenly distributed among all clients
+    double initialQPS = intervals[0].requestsPerSecond / numClients;
+    for (int i = 0; i < numServerThreads; ++i) {
+        qpsPerClient.push_back(initialQPS);
+    }
     return 0;
 }
 
 static void* start_master(void *arg) {
     fprintf(stderr, "Start the master!\n");
     benchmark_config *cfg = (benchmark_config*)arg;
-    if (parse_config_file(cfg->config_file) < 0) {
-        fprintf(stderr, "ERROR: fail to read config file \n");
-        exit(1);
-    }
+    // Initialize per client qps
+    int numServerThreads = cfg->server_threads;
+    int numClients = cfg->threads * cfg->clients;
+    double clientQPS = 0;
 
     fprintf(stderr, "Num of intervals: %zu \n", numIntervals);
 
@@ -944,26 +954,16 @@ static void* start_master(void *arg) {
     size_t currentInterval = 0;
 
     // Start the DCFT-style loop
-    Generator* intervalGenerator;
-    uint64_t nextCycleTime;
     switch (distType) {
         case NONE:
             fprintf(stderr, "No inter-request time! \n");
-            intervalGenerator = new Generator();
             break;
         case POISSON:
             fprintf(stderr, "Poisson distribution! \n");
-            intervalGenerator =
-                new Poisson(intervals[currentInterval].creationsPerSecond);
             break;
         case UNIFORM:
             fprintf(stderr, "Uniform distribution! \n");
-            intervalGenerator =
-                new Uniform(intervals[currentInterval].creationsPerSecond);
     }
-    nextCycleTime =
-        Cycles::rdtsc() +
-        Cycles::fromSeconds(intervalGenerator->generate());
 
     uint64_t currentTime = Cycles::rdtsc();
 
@@ -971,53 +971,33 @@ static void* start_master(void *arg) {
         currentTime +
         Cycles::fromNanoseconds(intervals[currentInterval].timeToRun);
 
-    int64_t reqsCount = 0;
     int64_t shouldCount = 0;
-    shouldCount += intervals[currentInterval].creationsPerSecond *
+    shouldCount += intervals[currentInterval].requestsPerSecond *
         (intervals[currentInterval].timeToRun / 1000000000);
+
     for (;; currentTime = Cycles::rdtsc()) {
-        if (nextCycleTime < currentTime) {
-            reqsCount++;
-            outReqs.fetch_add(1, std::memory_order::memory_order_relaxed);
-
-            nextCycleTime = nextCycleTime +
-                Cycles::fromSeconds(intervalGenerator->generate());
-
-            // Trying to send out as fast as possible when we are not meeting
-            // the threshold
-            if (nextCycleTime < currentTime) {
-                nextCycleTime = currentTime;
-            }
-        }
-
         if (nextIntervalTime < currentTime) {
             // Advance the interval
             currentInterval++;
-            outReqs.store(0);
             if (currentInterval == numIntervals)
                 break;
+            shouldCount += intervals[currentInterval].requestsPerSecond *
+                (intervals[currentInterval].timeToRun / 1000000000);
+            // Evenly distributed among all clients
+            clientQPS = intervals[currentInterval].requestsPerSecond / numClients;
+            for (int i = 0; i < numServerThreads; ++i) {
+                qpsPerClient[i] = clientQPS;
+            }
             nextIntervalTime =
                 currentTime +
                 Cycles::fromNanoseconds(intervals[currentInterval].timeToRun);
 
-            intervalGenerator->set_lambda(
-                intervals[currentInterval].creationsPerSecond);
-            nextCycleTime = Cycles::rdtsc() +
-                Cycles::fromSeconds(intervalGenerator->generate());
-
-            shouldCount += intervals[currentInterval].creationsPerSecond *
-                (intervals[currentInterval].timeToRun / 1000000000);
         }
+        usleep(10000); // sleep 10ms avoid busy loop
     }
 
     master_finished = true;
-    fprintf(stderr, "[STATS] should run %ld reqs, master issue %ld reqs, "
-            "clients actually issue %ld reqs, "
-            "actually send out %ld reqs, actuall responses %ld \n",
-            shouldCount, reqsCount, realIssueCount.load(),
-            realSendReqsCount.load(),
-            realResponseCount.load());
-    delete intervalGenerator;
+    fprintf(stderr, "[STATS] should send out %ld reqs \n", shouldCount);
     return NULL;
 }
 
@@ -1071,6 +1051,7 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     unsigned long int cur_ops_sec = 0;
     unsigned long int cur_bytes_sec = 0;
     unsigned long int realTotalOps = 0;
+    unsigned long int total_ops = 0;
 
     // To collect per-client stats
 #ifdef PER_CLIENT
@@ -1099,7 +1080,7 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         active_threads = 0;
         sleep(1);
 
-        unsigned long int total_ops = 0;
+        total_ops = 0;
         unsigned long int total_bytes = 0;
         unsigned long int duration = 0;
         unsigned int thread_counter = 0; 
@@ -1195,7 +1176,8 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     fprintf(stderr, "\n\n");
     double realDuration = (stopTime.tv_sec - startTime.tv_sec) + ((stopTime.tv_usec - startTime.tv_usec) / 1000000.0);
     double realThroughput = realTotalOps / realDuration;
-    fprintf(stderr, "Real throughput (ops/sec) is: %.2lf \n", realThroughput);
+    fprintf(stderr, "Real throughput (ops/sec) is: %.2lf \n"
+            "Total responses: %ld \n", realThroughput, total_ops);
 
 #ifdef PER_CLIENT
     // Print per-client stats summary
@@ -1258,10 +1240,6 @@ int main(int argc, char *argv[])
     struct benchmark_config cfg;
 
     master_finished = false;
-    outReqs.store(0);
-    realSendReqsCount.store(0);
-    realResponseCount.store(0);
-    realIssueCount.store(0);
 
     memset(&cfg, 0, sizeof(struct benchmark_config));
     if (config_parse_args(argc, argv, &cfg) < 0) {
@@ -1275,7 +1253,13 @@ int main(int argc, char *argv[])
         config_print(stdout, &cfg);
         fprintf(stderr, "===================================================\n");
     }
-    //
+
+    // Parse benchmark config file
+    if (parse_config_file(&cfg) < 0) {
+        fprintf(stderr, "ERROR: fail to read config file \n");
+        exit(1);
+    }
+
     // JSON file initiation
     json_handler *jsonhandler = NULL;
     if (cfg.json_out_file != NULL){

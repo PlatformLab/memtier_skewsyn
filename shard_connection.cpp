@@ -49,6 +49,8 @@
 #include "memtier_benchmark.h"
 #include "connections_manager.h"
 
+using PerfUtils::Cycles;
+
 void cluster_client_event_handler(evutil_socket_t sfd, short evtype, void *opaque)
 {
     shard_connection *sc = (shard_connection *) opaque;
@@ -179,6 +181,11 @@ shard_connection::~shard_connection() {
         delete m_pipeline;
         m_pipeline = NULL;
     }
+
+    if (intervalGenerator != NULL) {
+        delete intervalGenerator;
+        intervalGenerator = NULL;
+    }
 }
 
 void shard_connection::setup_event() {
@@ -305,7 +312,7 @@ request* shard_connection::pop_req() {
 
     m_pending_resp--;
     assert(m_pending_resp >= 0);
-    realResponseCount.fetch_add(1);
+    // realResponseCount.fetch_add(1);
     return req;
 }
 
@@ -434,29 +441,25 @@ void shard_connection::process_first_request() {
 void shard_connection::fill_pipeline(void)
 {
     struct timeval now;
+    uint64_t currentTime = Cycles::rdtsc();
+    int ret;
+
     gettimeofday(&now, NULL);
 
+    // don't exceed requests
+    if (m_conns_manager->hold_pipeline(m_id))
+        return;
+    if (!is_conn_setup_done()) {
+        send_conn_setup_commands(now);
+    }
 
-    while (!m_conns_manager->finished() && m_pipeline->size() < m_config->pipeline) {
-        if (!is_conn_setup_done()) {
-            send_conn_setup_commands(now);
-            return;
-        }
+    while (!m_conns_manager->finished() &&
+           m_pipeline->size() < m_config->pipeline &&
+           nextCycleTime < currentTime) {
 
-        // don't exceed requests
-        if (m_conns_manager->hold_pipeline(m_id))
-            break;
-
-        // Check the ourReqs to decide whether or not to send out request
-        int ret = outReqs.fetch_sub(1);
-        if (ret <= 0) {
-            // If it is not our turn, then just break the loop.
-            outReqs++;
-            return;
-        }
-        // client manage requests logic
+        // Check the current time to decide whether or not to send out request
         m_conns_manager->create_request(now, m_id);
-        realIssueCount.fetch_add(1);
+        // realIssueCount.fetch_add(1);
 
         // Send out here!
         if (evbuffer_get_length(m_write_buf) > 0) {
@@ -472,14 +475,41 @@ void shard_connection::fill_pipeline(void)
 
                     return;
                 }
-                realSendReqsCount.fetch_add(1);
+                // realSendReqsCount.fetch_add(1);
             }
-            else {
-                realSendReqsCount.fetch_add(1);
-            }
+            // else {
+            //     realSendReqsCount.fetch_add(1);
+            // }
         }
 
+        // Update nextCycleTime
+        nextCycleTime =
+            nextCycleTime +
+            Cycles::fromSeconds(intervalGenerator->generate());
+
+        // Trying to send out as fast as possible when we are not meeting
+        // the threshold. Either the next time is still less than current
+        // time, or the pipeline is full.
+        if (nextCycleTime < currentTime) {
+            nextCycleTime = currentTime;
+        }
+
+        // Update the distribution params
+        if (intervalGenerator->get_lambda() != qpsPerClient[serverTid]) {
+            intervalGenerator->set_lambda(
+                qpsPerClient[serverTid]);
+
+            nextCycleTime = Cycles::rdtsc() +
+                Cycles::fromSeconds(intervalGenerator->generate());
+
+            // fprintf(stderr, "change to new QPS: %.2lf \n",
+            //        qpsPerClient[serverTid]);
+        }
+
+        currentTime = Cycles::rdtsc();
+        // break;
     }
+
 }
 
 void shard_connection::handle_event(short evtype)

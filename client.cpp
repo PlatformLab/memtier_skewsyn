@@ -51,6 +51,8 @@
 #include "client.h"
 #include "cluster_client.h"
 
+using PerfUtils::Cycles;
+
 pthread_mutex_t client::m_skew_mutex = PTHREAD_MUTEX_INITIALIZER;
 int client::skew_count = 0;
 int client::total_conns = 0;
@@ -388,9 +390,23 @@ int client::prepare(void)
     }
     // XXX: Must make sure that we have been dispatched to a thread
     sc->gurantee_sockfd_dispatch();
+
+    sc->serverTid = client::total_conns % m_config->server_threads;
+    int serverTid = sc->serverTid;
+
+    // Set distribution param (client QPS) based on the server thread id
+    switch (distType) {
+        case NONE:
+            sc->intervalGenerator = new Generator();
+            break;
+        case POISSON:
+            sc->intervalGenerator = new Poisson(qpsPerClient[serverTid]);
+            break;
+        case UNIFORM:
+            sc->intervalGenerator = new Uniform(qpsPerClient[serverTid]);
+    }
     fprintf(stderr, "Total connections: %d, server thread: %d, real conns %d\n",
-            client::total_conns, client::total_conns % m_config->server_threads,
-            client::real_conns);
+            client::total_conns, sc->serverTid, client::real_conns);
 
     client::real_conns++;
     client::total_conns++;
@@ -400,6 +416,9 @@ int client::prepare(void)
     }
     pthread_mutex_unlock(&client::m_skew_mutex);
 
+    sc->nextCycleTime =
+        Cycles::rdtsc() +
+        Cycles::fromSeconds(sc->intervalGenerator->generate());
     return 0;
 }
 
