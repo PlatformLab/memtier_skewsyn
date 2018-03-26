@@ -90,6 +90,9 @@ struct benchmark_config {
     int skew_level;
     int server_threads;
     const char *config_file;
+    const char *ir_distribution;
+    // To control the distribution of inter-requests time
+    DistributionType distType;
 };
 
 
@@ -97,7 +100,6 @@ extern void benchmark_log_file_line(int level, const char *filename, unsigned in
 extern void benchmark_log(int level, const char *fmt, ...);
 
 extern bool master_finished; // master thread finished or not?
-extern enum DistributionType distType;  // Distribution type of inter-reqs time
 extern std::vector<double> qpsPerClient;
 
 #endif /* _MEMTIER_BENCHMARK_H */

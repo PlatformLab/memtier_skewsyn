@@ -47,9 +47,6 @@ using PerfUtils::Cycles;
 
 bool master_finished = false;
 
-// To control the distribution of inter-requests time
-DistributionType distType = POISSON;
-
 // QPS for each clieint on each server thread
 std::vector<double> qpsPerClient;
 
@@ -334,7 +331,8 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         o_json_out_file,
         o_cluster_mode,
         o_server_threads,
-        o_config_file
+        o_config_file,
+        o_ir_distribution
     };
     
     static struct option long_options[] = {
@@ -389,6 +387,7 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         { "skew-level",                 1, 0, 'k'},
         { "server-threads",             1, 0, o_server_threads },
         { "config-file",                1, 0, o_config_file},
+        { "ir-dist",                    1, 0, o_ir_distribution},
         { NULL,                         0, 0, 0 }
     };
 
@@ -431,6 +430,16 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
                     break;
                 case o_config_file:
                     cfg->config_file = optarg;
+                    break;
+                case o_ir_distribution:
+                    if (strcmp(optarg, "NONE") &&
+                        strcmp(optarg, "POISSON") &&
+                        strcmp(optarg, "UNIFORM")) {
+                            fprintf(stderr, "Don't support this type: %s \n",
+                                    optarg);
+                            return -1;
+                        }
+                    cfg->ir_distribution = optarg;
                     break;
                 case 's':
                     cfg->server = optarg;
@@ -734,6 +743,21 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         fprintf(stderr, "ERROR: Please specify a configuration file!\n");
         return -1;
     }
+
+    if (cfg->ir_distribution != NULL) {
+        if (strcmp(cfg->ir_distribution, "NONE") == 0) {
+            cfg->distType = NONE;
+        } else if (strcmp(cfg->ir_distribution, "POISSON") == 0) {
+            cfg->distType = POISSON;
+        } else if (strcmp(cfg->ir_distribution, "UNIFORM") == 0) {
+            cfg->distType = UNIFORM;
+        } else {
+            fprintf(stderr, "Do not support type: %s \n", cfg->ir_distribution);
+            return -1;
+        }
+    } else {
+        cfg->distType = NONE;
+    }
     return 0;
 }
 
@@ -821,6 +845,10 @@ void usage() {
             "SKEWED Option:\n"
             "  -k  --skew-level               How many clients pileup on memcached's 1st thread \n"
             "      --sever-threads            How many worker threads used in memcached server \n"
+            "\n"
+            "SYNTHETIC Option:\n"
+            "      --config-file              Input synthetic benchmark config file \n"
+            "      --ir-dist                  Inter request distribution type (NONE/POISSON/UNIFORM) \n"
             "\n"
             );
     
@@ -954,7 +982,7 @@ static void* start_master(void *arg) {
     size_t currentInterval = 0;
 
     // Start the DCFT-style loop
-    switch (distType) {
+    switch (cfg->distType) {
         case NONE:
             fprintf(stderr, "No inter-request time! \n");
             break;

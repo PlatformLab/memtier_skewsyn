@@ -395,7 +395,7 @@ int client::prepare(void)
     int serverTid = sc->serverTid;
 
     // Set distribution param (client QPS) based on the server thread id
-    switch (distType) {
+    switch (m_config->distType) {
         case NONE:
             sc->intervalGenerator = new Generator();
             break;
