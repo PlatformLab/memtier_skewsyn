@@ -3,8 +3,8 @@
 
 #include <random>
 #include <string>
+#include <limits>
 
-#include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,7 +35,7 @@ class Poisson : public Generator {
 
     virtual double generate() override {
         if (this->lambda <= 0.0)
-            return 0.0;
+            return 86400; // 24 hours!
         return this->expIG(gen);
     }
 
@@ -68,7 +68,7 @@ class Uniform : public Generator {
 
     virtual double generate() override {
         if (this->lambda <= 0.0)
-            return 0.0;
+            return 86400;
         return this->uniformIG(gen);
     }
 

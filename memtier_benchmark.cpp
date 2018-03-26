@@ -53,6 +53,7 @@ std::vector<double> qpsPerClient;
 struct Interval {
     int64_t timeToRun; // The time (in ns) we spend on this interval
     double requestsPerSecond;
+    double skewFactor; // Proportion of the QPS to the first server thread
 } *intervals;
 
 static size_t numIntervals; // Num of intervals in the config file
@@ -951,18 +952,30 @@ static int parse_config_file(benchmark_config *cfg) {
             fprintf(stderr, "Error reading configuration file: %s\n", strerror(errno));
             return -1;
         }
-        sscanf(buffer, "%ld %lf", &intervals[i].timeToRun,
-               &intervals[i].requestsPerSecond);
+        sscanf(buffer, "%ld %lf %lf", &intervals[i].timeToRun,
+               &intervals[i].requestsPerSecond, &intervals[i].skewFactor);
     }
     fclose(specFile);
 
     // Initialize per client qps
     int numServerThreads = cfg->server_threads;
     int numClients = cfg->threads * cfg->clients;
+    double initialTotalQPS = intervals[0].requestsPerSecond;
+    double initialSkew = intervals[0].skewFactor;
 
-    // Evenly distributed among all clients
-    double initialQPS = intervals[0].requestsPerSecond / numClients;
-    for (int i = 0; i < numServerThreads; ++i) {
+    // Skew on the first thread
+    double initialQPSskew = initialTotalQPS *
+        initialSkew * numServerThreads / (numClients * 1.0);
+
+    qpsPerClient.push_back(initialQPSskew);
+
+    // Evenly distributed among all other clients
+    double initialQPS = initialTotalQPS *
+        (1.0 - initialSkew) * numServerThreads /
+        (numClients * (numServerThreads - 1) * 1.0);
+
+    // Fill in all other threads
+    for (int i = 1; i < numServerThreads; ++i) {
         qpsPerClient.push_back(initialQPS);
     }
     return 0;
@@ -974,7 +987,10 @@ static void* start_master(void *arg) {
     // Initialize per client qps
     int numServerThreads = cfg->server_threads;
     int numClients = cfg->threads * cfg->clients;
-    double clientQPS = 0;
+    double clientQPS = 0.0;
+    double clientQPSskew = 0.0;
+    double totalQPS = 0.0;
+    double currentSkew = 0.0;
 
     fprintf(stderr, "Num of intervals: %zu \n", numIntervals);
 
@@ -1011,11 +1027,25 @@ static void* start_master(void *arg) {
                 break;
             shouldCount += intervals[currentInterval].requestsPerSecond *
                 (intervals[currentInterval].timeToRun / 1000000000);
-            // Evenly distributed among all clients
-            clientQPS = intervals[currentInterval].requestsPerSecond / numClients;
-            for (int i = 0; i < numServerThreads; ++i) {
+
+            // Skew on the first thread
+            currentSkew = intervals[currentInterval].skewFactor;
+            totalQPS = intervals[currentInterval].requestsPerSecond;
+            clientQPSskew =
+                totalQPS * currentSkew * numServerThreads / (numClients * 1.0);
+
+            qpsPerClient[0] = clientQPSskew;
+
+            // Evenly distributed among all other clients
+            clientQPS =
+                totalQPS * (1.0 - currentSkew) * numServerThreads /
+                (numClients * (numServerThreads - 1) * 1.0);
+
+            // Fill in all other threads
+            for (int i = 1; i < numServerThreads; ++i) {
                 qpsPerClient[i] = clientQPS;
             }
+
             nextIntervalTime =
                 currentTime +
                 Cycles::fromNanoseconds(intervals[currentInterval].timeToRun);
