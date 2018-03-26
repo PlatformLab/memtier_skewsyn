@@ -926,6 +926,8 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     memset(prevOpsPerClient, 0, totalClients * sizeof(unsigned long int));
     memset(currOpsPerClient, 0, totalClients * sizeof(unsigned long int));
     memset(prevLatencyPerClient, 0, totalClients * sizeof(double));
+    memset(totalOpsPerClient, 0, totalClients * sizeof(unsigned long int));
+    memset(totalLatencyPerClient, 0, totalClients * sizeof(double));
 
     // provide some feedback...
     unsigned int active_threads = 0;
@@ -939,10 +941,7 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         unsigned int thread_counter = 0; 
         unsigned long int total_latency = 0;
 
-        memset(totalOpsPerClient, 0, totalClients * sizeof(unsigned long int));
-        memset(totalLatencyPerClient, 0, totalClients * sizeof(double));
         int cid = 0; // client id
-        
         gettimeofday(&curstartTime, NULL);
         double curDuration = (curstartTime.tv_sec - prevstartTime.tv_sec) +
                              ((curstartTime.tv_usec - prevstartTime.tv_usec) / 1000000.0);
@@ -965,12 +964,14 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
                 totalOpsPerClient[cid] = (*j)->get_stats()->get_total_ops();
                 totalLatencyPerClient[cid] = (*j)->get_stats()->get_total_latency();
 
+#ifdef PER_CLIENT
                 currOpsPerClient[cid] = totalOpsPerClient[cid] - prevOpsPerClient[cid];
                 currLatencyPerClient[cid] = (totalLatencyPerClient[cid] - prevLatencyPerClient[cid])
                                             / currOpsPerClient[cid];
 
                 fprintf(stderr, "Cid: %d, currOps/sec: %.2lf, currLatency: %.4lf us\n",
                         cid, currOpsPerClient[cid] / curDuration, currLatencyPerClient[cid]);
+#endif
 
                 prevOpsPerClient[cid] = totalOpsPerClient[cid];
                 prevLatencyPerClient[cid] = totalLatencyPerClient[cid];

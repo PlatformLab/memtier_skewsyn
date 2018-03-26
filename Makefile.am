@@ -21,7 +21,7 @@ EXTRA_DIST = README.md COPYING
 
 bin_PROGRAMS = memtier_benchmark
 
-memtier_benchmark_CPPFLAGS = $(LIBEVENT_CFLAGS)
+memtier_benchmark_CPPFLAGS = $(LIBEVENT_CFLAGS) -DNPER_CLIENT
 memtier_benchmark_SOURCES = \
 	memtier_benchmark.cpp memtier_benchmark.h \
 	client.cpp client.h \
