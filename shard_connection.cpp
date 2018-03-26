@@ -442,7 +442,6 @@ void shard_connection::fill_pipeline(void)
 {
     struct timeval now;
     uint64_t currentTime = Cycles::rdtsc();
-    int ret;
 
     gettimeofday(&now, NULL);
 
@@ -453,21 +452,16 @@ void shard_connection::fill_pipeline(void)
         send_conn_setup_commands(now);
     }
 
-    while (!m_conns_manager->finished() &&
+    // Clipping based on pipeline size
+    while (!master_finished &&
            m_pipeline->size() < m_config->pipeline &&
            nextCycleTime < currentTime) {
 
         // Check the current time to decide whether or not to send out request
         m_conns_manager->create_request(now, m_id);
-        // realIssueCount.fetch_add(1);
 
         // Send out here!
-        if (evbuffer_get_length(m_write_buf) > 0) {
-            // Make sure socket is writable
-            do {
-                ret = check_sockfd_writable();
-            } while ((ret == -1) && (errno == EINTR));
-
+        if (check_sockfd_writable() > 0) {
             if (evbuffer_write(m_write_buf, m_sockfd) < 0) {
                 if (errno != EWOULDBLOCK) {
                     benchmark_error_log("write error: %s\n", strerror(errno));
@@ -475,11 +469,7 @@ void shard_connection::fill_pipeline(void)
 
                     return;
                 }
-                // realSendReqsCount.fetch_add(1);
             }
-            // else {
-            //     realSendReqsCount.fetch_add(1);
-            // }
         }
 
         // Update nextCycleTime
@@ -487,27 +477,19 @@ void shard_connection::fill_pipeline(void)
             nextCycleTime +
             Cycles::fromSeconds(intervalGenerator->generate());
 
-        // Trying to send out as fast as possible when we are not meeting
-        // the threshold. Either the next time is still less than current
-        // time, or the pipeline is full.
-        if (nextCycleTime < currentTime) {
-            nextCycleTime = currentTime;
-        }
-
-        // Update the distribution params
-        if (intervalGenerator->get_lambda() != qpsPerClient[serverTid]) {
-            intervalGenerator->set_lambda(
-                qpsPerClient[serverTid]);
-
-            nextCycleTime = Cycles::rdtsc() +
-                Cycles::fromSeconds(intervalGenerator->generate());
-
-            // fprintf(stderr, "change to new QPS: %.2lf \n",
-            //        qpsPerClient[serverTid]);
-        }
+        // Don't clip the same as previous synthetic benchmark!
+//        if (nextCycleTime < currentTime) {
+//            nextCycleTime = currentTime;
+//        }
 
         currentTime = Cycles::rdtsc();
-        // break;
+        gettimeofday(&now, NULL);
+    }
+
+    // Update the distribution params
+    if (intervalGenerator->set_lambda(qpsPerClient[serverTid])) {
+        nextCycleTime = Cycles::rdtsc() +
+            Cycles::fromSeconds(intervalGenerator->generate());
     }
 
 }
@@ -541,20 +523,18 @@ void shard_connection::handle_event(short evtype)
     }
 
     assert(m_connected == true);
-//    if ((evtype & EV_WRITE) == EV_WRITE && evbuffer_get_length(m_write_buf) > 0) {
-//        if (evbuffer_write(m_write_buf, m_sockfd) < 0) {
-//            if (errno != EWOULDBLOCK) {
-//                benchmark_error_log("write error: %s\n", strerror(errno));
-//                disconnect();
-//
-//                return;
-//            }
-//            realSendReqsCount.fetch_add(1);
-//        }
-//        else {
-//            realSendReqsCount.fetch_add(1);
-//        }
-//    }
+
+    // Send if something remained in the buffer
+    if ((evtype & EV_WRITE) == EV_WRITE && evbuffer_get_length(m_write_buf) > 0) {
+        if (evbuffer_write(m_write_buf, m_sockfd) < 0) {
+            if (errno != EWOULDBLOCK) {
+                benchmark_error_log("write error: %s\n", strerror(errno));
+                disconnect();
+
+                return;
+            }
+        }
+    }
 
     if ((evtype & EV_READ) == EV_READ) {
         int ret = 1;
@@ -597,11 +577,6 @@ void shard_connection::handle_event(short evtype)
     if (m_pending_resp) {
         new_evtype = EV_READ;
     }
-
-//    if (evbuffer_get_length(m_write_buf) > 0) {
-//        assert(!m_conns_manager->finished());
-//        new_evtype |= EV_WRITE;
-//    }
 
     // Always update to write!
     if (!m_conns_manager->finished()) {

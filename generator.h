@@ -22,7 +22,8 @@ class Generator {
     virtual ~Generator() {}
 
     virtual double generate() { return 0.0; }
-    virtual void set_lambda(double lambda) {}
+    // Return false if no change is made
+    virtual bool set_lambda(double lambda) { return false; }
     virtual double get_lambda() { return 0.0; }
 };
 
@@ -38,14 +39,15 @@ class Poisson : public Generator {
         return this->expIG(gen);
     }
 
-    virtual void set_lambda(double lambda) override {
+    virtual bool set_lambda(double lambda) override {
         if (this->lambda == lambda)
-            return;
+            return false;
         this->lambda = lambda;
         if (lambda > 0.0) {
             this->expIG.param(
                 std::exponential_distribution<double>::param_type(lambda));
         }
+        return true;
     }
 
     virtual double get_lambda() override { return this->lambda; }
@@ -70,15 +72,16 @@ class Uniform : public Generator {
         return this->uniformIG(gen);
     }
 
-    virtual void set_lambda(double lambda) override {
+    virtual bool set_lambda(double lambda) override {
         if (this->lambda == lambda)
-            return;
+            return false;
         this->lambda = lambda;
         if (lambda > 0.0) {
             this->uniformIG.param(
                 std::uniform_real_distribution<double>::param_type(
                     0, 2.0 / lambda));
         }
+        return true;
     }
 
     virtual double get_lambda() override { return this->lambda; }
