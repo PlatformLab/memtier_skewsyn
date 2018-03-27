@@ -33,6 +33,7 @@
 #include <getopt.h>
 #include <assert.h>
 #include <errno.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 
@@ -759,6 +760,11 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
     } else {
         cfg->distType = NONE;
     }
+
+    // TODO: Hard-coded for now, will need to add options to set those files
+    cfg->log_dir = "./latency_throughput_log";
+    cfg->log_qps_file = "throughput.log";
+    cfg->log_latency_file = "latency.log";
     return 0;
 }
 
@@ -930,6 +936,23 @@ void size_to_str(unsigned long int size, char *buf, int buf_len)
         snprintf(buf, buf_len, "%.2fKB",
             (float) size / 1024);
     }    
+}
+
+// Check a directory exists or not. If not exists, then create one.
+static void check_dir(std::string &dir) {
+    struct stat st;
+    if (stat(dir.c_str(), &st) == 0) {
+        if ((st.st_mode & S_IFDIR) != 0) {
+            fprintf(stderr, "\nOutput dir: %s exists!\n", dir.c_str());
+        }
+    } else {
+        fprintf(stderr, "Creating dir: %s ...\n", dir.c_str());
+        const int dir_err = mkdir(dir.c_str(),  S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+        if (dir_err != 0) {
+            printf("Error creating dir: %s !\n", dir.c_str());
+            exit(-1);
+        }
+    }
 }
 
 static int parse_config_file(benchmark_config *cfg) {
@@ -1132,6 +1155,44 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     memset(totalLatencyPerClient, 0, totalClients * sizeof(double));
 #endif
 
+    // To collect per-server thread stats
+#ifdef PER_SERVER_TID
+    int serverThreads = cfg->server_threads;
+    unsigned long int *prevOpsPerTid = new unsigned long int[serverThreads];
+    unsigned long int *currOpsPerTid = new unsigned long int[serverThreads];
+    double *prevLatencyPerTid = new double[serverThreads];
+    double *currLatencyPerTid = new double[serverThreads];
+
+    unsigned long int *realTotalOpsPerTid = prevOpsPerTid;
+    double *realTotalLatencyPerTid = prevLatencyPerTid;
+
+    unsigned long int *totalOpsPerTid = new unsigned long int[serverThreads];
+    double *totalLatencyPerTid = new double[serverThreads];
+
+    memset(prevOpsPerTid, 0, serverThreads * sizeof(unsigned long int));
+    memset(currOpsPerTid, 0, serverThreads * sizeof(unsigned long int));
+    memset(prevLatencyPerTid, 0, serverThreads * sizeof(double));
+
+    std::string logDir = std::string(cfg->log_dir);
+    check_dir(logDir);
+    std::string filePath;
+    filePath = logDir + "/" + cfg->log_qps_file;
+    FILE *qpsLog = fopen(filePath.c_str(), "w");
+
+    filePath = logDir  + "/" + cfg->log_latency_file;
+    FILE *latencyLog = fopen(filePath.c_str(), "w");
+
+    fprintf(qpsLog, "TimeInUSecSinceEpoch");
+    fprintf(latencyLog, "TimeInUSecSinceEpoch");
+
+    for (int tid = 0; tid < serverThreads; ++tid) {
+        fprintf(qpsLog, ",tid%02d_qps", tid);
+        fprintf(latencyLog, ",tid%02d_(us)", tid);
+    }
+    fprintf(qpsLog, "\n");
+    fprintf(latencyLog, "\n");
+#endif
+
     // provide some feedback...
     unsigned int active_threads = 0;
     do {
@@ -1146,6 +1207,11 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
 
 #ifdef PER_CLIENT
         int cid = 0; // client id
+#endif
+
+#ifdef PER_SERVER_TID
+        memset(totalOpsPerTid, 0, serverThreads * sizeof(unsigned long int));
+        memset(totalLatencyPerTid, 0, serverThreads * sizeof(double));
 #endif
 
         gettimeofday(&curstartTime, NULL);
@@ -1183,8 +1249,42 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
                 cid++;
             }
 #endif
+
+#ifdef PER_SERVER_TID
+            // Collect per server thread id stats
+            for (std::vector<client*>::iterator j = (*i)->m_cg->m_clients.begin();
+                 j != (*i)->m_cg->m_clients.end(); ++j) {
+                int tid = (*j)->serverTid;
+                totalOpsPerTid[tid] += (*j)->get_stats()->get_total_ops();
+                totalLatencyPerTid[tid] += (*j)->get_stats()->get_total_latency();
+            }
+#endif
         }
 
+#ifdef PER_SERVER_TID
+        unsigned long int curTimeStamp =
+            curstartTime.tv_sec * 1000000 + curstartTime.tv_usec;
+        fprintf(qpsLog, "%lu", curTimeStamp);
+        fprintf(latencyLog, "%lu", curTimeStamp);
+        for (int tid = 0; tid < serverThreads; ++tid) {
+            currOpsPerTid[tid] = totalOpsPerTid[tid] - prevOpsPerTid[tid];
+            currLatencyPerTid[tid] =
+                (totalLatencyPerTid[tid] - prevLatencyPerTid[tid]) /
+                currOpsPerTid[tid];
+            double currOps = currOpsPerTid[tid] / curDuration;
+            fprintf(qpsLog, ",%.2lf", currOps);
+            fprintf(latencyLog, ",%.3lf", currLatencyPerTid[tid]);
+            fprintf(stderr, "ServerTid: %d, currOps/sec: %.2lf, "
+                    "currLatency: %.3lf us \n",
+                    tid, currOps,
+                    currLatencyPerTid[tid]);
+            prevOpsPerTid[tid] = totalOpsPerTid[tid];
+            prevLatencyPerTid[tid] = totalLatencyPerTid[tid];
+        }
+        fprintf(qpsLog, "\n");
+        fprintf(latencyLog, "\n");
+        fprintf(stderr, "\n");
+#endif
         // In order to throw out the last loop
         stopTime = prevstartTime;
         realTotalOps = prev_ops;
@@ -1239,16 +1339,20 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
 
 #ifdef PER_CLIENT
     // Print per-client stats summary
-    int cid = 0;
-    for (std::vector<cg_thread*>::iterator i = threads.begin(); i != threads.end(); i++) {
-        for (std::vector<client*>::iterator j = (*i)->m_cg->m_clients.begin();
-             j != (*i)->m_cg->m_clients.end(); ++j) {
-            fprintf(stderr, "Cid: %d, Avg Ops/sec: %.2lf, Avg Latency: %.4lf us\n",
-                    cid, realTotalOpsPerClient[cid] / realDuration,
-                    realTotalLatencyPerClient[cid] / realTotalOpsPerClient[cid]);
-            cid++;
-        }
+    for (int cid = 0; cid < totalClients; ++cid) {
+        fprintf(stderr, "Cid: %d, Avg Ops/sec: %.2lf, Avg Latency: %.4lf us\n",
+                cid, realTotalOpsPerClient[cid] / realDuration,
+                realTotalLatencyPerClient[cid] / realTotalOpsPerClient[cid]);
+    }
+#endif
 
+#ifdef PER_SERVER_TID
+    // Print per server thread id summary
+    for (int tid = 0; tid < serverThreads; ++tid) {
+        fprintf(stderr, "ServerTid: %d, Avg Ops/sec: %.2lf,"
+                "Avg Latency: %.4lf us \n",
+                tid, realTotalOpsPerTid[tid] / realDuration,
+                realTotalLatencyPerTid[tid] / realTotalOpsPerTid[tid]);
     }
 #endif
 
@@ -1289,6 +1393,19 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     delete []totalOpsPerClient;
     delete []totalLatencyPerClient;
 #endif
+
+#ifdef PER_SERVER_TID
+    delete []prevOpsPerTid;
+    delete []currOpsPerTid;
+    delete []prevLatencyPerTid;
+    delete []currLatencyPerTid;
+    delete []totalOpsPerTid;
+    delete []totalLatencyPerTid;
+
+    fclose(qpsLog);
+    fclose(latencyLog);
+#endif
+
     return stats;
 }
 

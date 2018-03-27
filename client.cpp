@@ -392,7 +392,7 @@ int client::prepare(void)
     sc->gurantee_sockfd_dispatch();
 
     sc->serverTid = client::total_conns % m_config->server_threads;
-    int serverTid = sc->serverTid;
+    this->serverTid = sc->serverTid;
 
     // Set distribution param (client QPS) based on the server thread id
     switch (m_config->distType) {
@@ -405,8 +405,8 @@ int client::prepare(void)
         case UNIFORM:
             sc->intervalGenerator = new Uniform(qpsPerClient[serverTid]);
     }
-    fprintf(stderr, "Total connections: %d, server thread: %d, real conns %d\n",
-            client::total_conns, sc->serverTid, client::real_conns);
+//    fprintf(stderr, "Total connections: %d, server thread: %d, real conns %d\n",
+//            client::total_conns, sc->serverTid, client::real_conns);
 
     client::real_conns++;
     client::total_conns++;

@@ -207,7 +207,6 @@ public:
     virtual bool hold_pipeline(unsigned int conn_id);
     virtual int connect(void);
     virtual void disconnect(void);
-    //
 
     // Utility function to get the object iterator type based on the config
     inline int obj_iter_type(benchmark_config *cfg, unsigned char index)
@@ -218,6 +217,9 @@ public:
             return OBJECT_GENERATOR_KEY_GAUSSIAN;
         return OBJECT_GENERATOR_KEY_SET_ITER;
     }
+
+    // Corresponding server thread id
+    int serverTid;
 };
 
 class verify_client : public client {

@@ -93,6 +93,11 @@ struct benchmark_config {
     const char *ir_distribution;
     // To control the distribution of inter-requests time
     DistributionType distType;
+
+    // Output log files
+    const char *log_dir;
+    const char *log_qps_file;
+    const char *log_latency_file;
 };
 
 

@@ -481,15 +481,13 @@ void shard_connection::fill_pipeline(void)
 //        if (nextCycleTime < currentTime) {
 //            nextCycleTime = currentTime;
 //        }
-
+        // Update the distribution params
+        if (intervalGenerator->set_lambda(qpsPerClient[serverTid])) {
+            nextCycleTime = Cycles::rdtsc() +
+                Cycles::fromSeconds(intervalGenerator->generate());
+        }
         currentTime = Cycles::rdtsc();
         gettimeofday(&now, NULL);
-    }
-
-    // Update the distribution params
-    if (intervalGenerator->set_lambda(qpsPerClient[serverTid])) {
-        nextCycleTime = Cycles::rdtsc() +
-            Cycles::fromSeconds(intervalGenerator->generate());
     }
 
 }

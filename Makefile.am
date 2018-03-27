@@ -23,7 +23,7 @@ bin_PROGRAMS = memtier_benchmark
 
 INCLUDES = -Iarachne-all/PerfUtils/include
 
-memtier_benchmark_CPPFLAGS = $(LIBEVENT_CFLAGS) -DNPER_CLIENT
+memtier_benchmark_CPPFLAGS = $(LIBEVENT_CFLAGS) -DNPER_CLIENT -DPER_SERVER_TID
 memtier_benchmark_SOURCES = \
 	memtier_benchmark.cpp memtier_benchmark.h \
 	client.cpp client.h \
