@@ -312,7 +312,6 @@ request* shard_connection::pop_req() {
 
     m_pending_resp--;
     assert(m_pending_resp >= 0);
-    // realResponseCount.fetch_add(1);
     return req;
 }
 
@@ -624,8 +623,6 @@ void shard_connection::send_get_command(struct timeval* sent_time,
     cmd_size = m_protocol->write_command_get(key, key_len, offset);
 
     push_req(new request(rt_get, cmd_size, sent_time, 1));
-
-    // realIssueCount.fetch_add(1);
 
 }
 
