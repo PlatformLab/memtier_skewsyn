@@ -337,7 +337,10 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         o_cluster_mode,
         o_server_threads,
         o_config_file,
-        o_ir_distribution
+        o_ir_distribution,
+        o_log_dir,
+        o_log_qps_file,
+        o_log_latency_file
     };
     
     static struct option long_options[] = {
@@ -393,6 +396,9 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         { "server-threads",             1, 0, o_server_threads },
         { "config-file",                1, 0, o_config_file},
         { "ir-dist",                    1, 0, o_ir_distribution},
+        { "log-dir",                    1, 0, o_log_dir},
+        { "log-qpsfile",                1, 0, o_log_qps_file},
+        { "log-latencyfile",            1, 0, o_log_latency_file},
         { NULL,                         0, 0, 0 }
     };
 
@@ -445,6 +451,15 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
                             return -1;
                         }
                     cfg->ir_distribution = optarg;
+                    break;
+                case o_log_dir:
+                    cfg->log_dir = optarg;
+                    break;
+                case o_log_qps_file:
+                    cfg->log_qps_file = optarg;
+                    break;
+                case o_log_latency_file:
+                    cfg->log_latency_file = optarg;
                     break;
                 case 's':
                     cfg->server = optarg;
@@ -764,10 +779,18 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         cfg->distType = NONE;
     }
 
-    // TODO: Hard-coded for now, will need to add options to set those files
-    cfg->log_dir = "./latency_throughput_log";
-    cfg->log_qps_file = "throughput.log";
-    cfg->log_latency_file = "latency.log";
+    if (cfg->log_dir == NULL) {
+        cfg->log_dir = "./latency_throughput_log";
+    }
+
+    if (cfg->log_qps_file == NULL) {
+        cfg->log_qps_file = "throughput.log";
+    }
+
+    if (cfg->log_latency_file == NULL) {
+        cfg->log_latency_file = "latency.log";
+    }
+
     return 0;
 }
 
@@ -859,6 +882,10 @@ void usage() {
             "SYNTHETIC Option:\n"
             "      --config-file              Input synthetic benchmark config file \n"
             "      --ir-dist                  Inter request distribution type (NONE/POISSON/UNIFORM) \n"
+            "LOGGING Option:\n"
+            "      --log-dir                  Directory to store log files \n"
+            "      --log-qpsfile              File name to store qps log \n"
+            "      --log-latencyfile          File name to store latency log \n"
             "\n"
             );
     
@@ -970,7 +997,7 @@ static int parse_config_file(benchmark_config *cfg) {
         fprintf(stderr, "Error reading configuration file: %s\n", strerror(errno));
         return -1;
     }
-    sscanf(buffer, "%zu", &numIntervals);
+    sscanf(buffer, "%zu %d", &numIntervals, &cfg->server_threads);
     intervals = new Interval[numIntervals];
 
     for (size_t i = 0; i < numIntervals; ++i) {
@@ -1016,7 +1043,8 @@ static void* start_master(void *arg) {
     double clientQPS = 0.0;
     double clientQPSskew = 0.0;
 
-    fprintf(stderr, "Num of intervals: %zu \n", numIntervals);
+    fprintf(stderr, "Num of intervals: %zu, Num of server threads %d\n",
+            numIntervals, numServerThreads);
 
     // Initialize interval index
     size_t currentInterval = 0;
@@ -1182,6 +1210,9 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     filePath = logDir  + "/" + cfg->log_latency_file;
     FILE *latencyLog = fopen(filePath.c_str(), "w");
 
+    fprintf(stderr, "Storing QPS log to %s/%s \n", cfg->log_dir, cfg->log_qps_file);
+    fprintf(stderr, "Storing latency log to %s/%s \n", cfg->log_dir,
+            cfg->log_latency_file);
     fprintf(qpsLog, "TimeInUSecSinceEpoch,DurationInSec,Skew,Goal");
     fprintf(latencyLog, "TimeInUSecSinceEpoch");
 
@@ -1193,6 +1224,8 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     fprintf(qpsLog, ",Total\n");
     fprintf(latencyLog, "\n");
 
+    fflush(qpsLog);
+    fflush(latencyLog);
     double prevSkew = currentSkew;
     double prevcurrGoalQPS = currGoalQPS;
 #endif
@@ -1283,10 +1316,10 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
             totalQPS += currOps;
             sprintf(outputBuff + strlen(outputBuff), ",%.2lf", currOps);
             fprintf(latencyLog, ",%.3lf", currLatencyPerTid[tid]);
-            fprintf(stderr, "ServerTid: %d, currOps/sec: %.2lf, "
-                    "currLatency: %.3lf us \n",
-                    tid, currOps,
-                    currLatencyPerTid[tid]);
+//            fprintf(stderr, "ServerTid: %d, currOps/sec: %.2lf, "
+//                    "currLatency: %.3lf us \n",
+//                    tid, currOps,
+//                    currLatencyPerTid[tid]);
             prevOpsPerTid[tid] = totalOpsPerTid[tid];
             prevLatencyPerTid[tid] = totalLatencyPerTid[tid];
         }
@@ -1301,7 +1334,9 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         }
         fprintf(qpsLog, "%s", outputBuff);
         fprintf(latencyLog, "\n");
-        fprintf(stderr, "\n");
+//        fprintf(stderr, "\n");
+        fflush(qpsLog);
+        fflush(latencyLog);
 
         prevSkew = currentSkew; // because we are logging for the last duration
         prevcurrGoalQPS = currGoalQPS;  // we must update later
