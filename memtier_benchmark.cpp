@@ -60,6 +60,9 @@ struct Interval {
 static size_t numIntervals; // Num of intervals in the config file
 
 static int log_level = 0;
+static double currGoalQPS = 0.0;
+static double currentSkew = 0.0;
+
 void benchmark_log_file_line(int level, const char *filename, unsigned int line, const char *fmt, ...)
 {
     if (level > log_level)
@@ -983,18 +986,18 @@ static int parse_config_file(benchmark_config *cfg) {
     // Initialize per client qps
     int numServerThreads = cfg->server_threads;
     int numClients = cfg->threads * cfg->clients;
-    double initialTotalQPS = intervals[0].requestsPerSecond;
-    double initialSkew = intervals[0].skewFactor;
+    currGoalQPS = intervals[0].requestsPerSecond;
+    currentSkew = intervals[0].skewFactor;
 
     // Skew on the first thread
-    double initialQPSskew = initialTotalQPS *
-        initialSkew * numServerThreads / (numClients * 1.0);
+    double initialQPSskew = currGoalQPS *
+        currentSkew * numServerThreads / (numClients * 1.0);
 
     qpsPerClient.push_back(initialQPSskew);
 
     // Evenly distributed among all other clients
-    double initialQPS = initialTotalQPS *
-        (1.0 - initialSkew) * numServerThreads /
+    double initialQPS = currGoalQPS *
+        (1.0 - currentSkew) * numServerThreads /
         (numClients * (numServerThreads - 1) * 1.0);
 
     // Fill in all other threads
@@ -1012,8 +1015,6 @@ static void* start_master(void *arg) {
     int numClients = cfg->threads * cfg->clients;
     double clientQPS = 0.0;
     double clientQPSskew = 0.0;
-    double totalQPS = 0.0;
-    double currentSkew = 0.0;
 
     fprintf(stderr, "Num of intervals: %zu \n", numIntervals);
 
@@ -1053,15 +1054,15 @@ static void* start_master(void *arg) {
 
             // Skew on the first thread
             currentSkew = intervals[currentInterval].skewFactor;
-            totalQPS = intervals[currentInterval].requestsPerSecond;
+            currGoalQPS = intervals[currentInterval].requestsPerSecond;
             clientQPSskew =
-                totalQPS * currentSkew * numServerThreads / (numClients * 1.0);
+                currGoalQPS * currentSkew * numServerThreads / (numClients * 1.0);
 
             qpsPerClient[0] = clientQPSskew;
 
             // Evenly distributed among all other clients
             clientQPS =
-                totalQPS * (1.0 - currentSkew) * numServerThreads /
+                currGoalQPS * (1.0 - currentSkew) * numServerThreads /
                 (numClients * (numServerThreads - 1) * 1.0);
 
             // Fill in all other threads
@@ -1072,7 +1073,6 @@ static void* start_master(void *arg) {
             nextIntervalTime =
                 currentTime +
                 Cycles::fromNanoseconds(intervals[currentInterval].timeToRun);
-
         }
         usleep(10000); // sleep 10ms avoid busy loop
     }
@@ -1182,22 +1182,27 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     filePath = logDir  + "/" + cfg->log_latency_file;
     FILE *latencyLog = fopen(filePath.c_str(), "w");
 
-    fprintf(qpsLog, "TimeInUSecSinceEpoch");
+    fprintf(qpsLog, "TimeInUSecSinceEpoch,DurationInSec,Skew,Goal");
     fprintf(latencyLog, "TimeInUSecSinceEpoch");
 
     for (int tid = 0; tid < serverThreads; ++tid) {
-        fprintf(qpsLog, ",tid%02d_qps", tid);
+        fprintf(qpsLog, ",tid%02d", tid);
         fprintf(latencyLog, ",tid%02d_(us)", tid);
     }
-    fprintf(qpsLog, "\n");
+
+    fprintf(qpsLog, ",Total\n");
     fprintf(latencyLog, "\n");
+
+    double prevSkew = currentSkew;
+    double prevcurrGoalQPS = currGoalQPS;
 #endif
 
     // provide some feedback...
     unsigned int active_threads = 0;
+    int iters = 0;
     do {
         active_threads = 0;
-        sleep(1);
+        usleep(200000); // Sleep 200 ms
 
         total_ops = 0;
         unsigned long int total_bytes = 0;
@@ -1262,17 +1267,21 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         }
 
 #ifdef PER_SERVER_TID
+        char outputBuff[1024];
         unsigned long int curTimeStamp =
             curstartTime.tv_sec * 1000000 + curstartTime.tv_usec;
-        fprintf(qpsLog, "%lu", curTimeStamp);
+        sprintf(outputBuff, "%lu,%.6lf,%6lf,%.2lf", curTimeStamp, curDuration,
+                prevSkew, prevcurrGoalQPS);
         fprintf(latencyLog, "%lu", curTimeStamp);
+        double totalQPS = 0.0;
         for (int tid = 0; tid < serverThreads; ++tid) {
             currOpsPerTid[tid] = totalOpsPerTid[tid] - prevOpsPerTid[tid];
             currLatencyPerTid[tid] =
                 (totalLatencyPerTid[tid] - prevLatencyPerTid[tid]) /
                 currOpsPerTid[tid];
             double currOps = currOpsPerTid[tid] / curDuration;
-            fprintf(qpsLog, ",%.2lf", currOps);
+            totalQPS += currOps;
+            sprintf(outputBuff + strlen(outputBuff), ",%.2lf", currOps);
             fprintf(latencyLog, ",%.3lf", currLatencyPerTid[tid]);
             fprintf(stderr, "ServerTid: %d, currOps/sec: %.2lf, "
                     "currLatency: %.3lf us \n",
@@ -1281,9 +1290,21 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
             prevOpsPerTid[tid] = totalOpsPerTid[tid];
             prevLatencyPerTid[tid] = totalLatencyPerTid[tid];
         }
-        fprintf(qpsLog, "\n");
+        sprintf(outputBuff + strlen(outputBuff), ",%.2lf\n", totalQPS);
+        if (iters == 0) {
+            // Duplicate the first line! For figures
+            char dupBuff[1024];
+            unsigned long prevTimeStamp = curTimeStamp - curDuration * 1000000;
+            sprintf(dupBuff, "%lu,%.6lf", prevTimeStamp, 0.0);
+            strcpy(dupBuff + strlen(dupBuff), outputBuff + strlen(dupBuff));
+            fprintf(qpsLog, "%s", dupBuff);
+        }
+        fprintf(qpsLog, "%s", outputBuff);
         fprintf(latencyLog, "\n");
         fprintf(stderr, "\n");
+
+        prevSkew = currentSkew; // because we are logging for the last duration
+        prevcurrGoalQPS = currGoalQPS;  // we must update later
 #endif
         // In order to throw out the last loop
         stopTime = prevstartTime;
@@ -1329,6 +1350,7 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         fprintf(stderr, "[RUN #%u %.0f%%, %3u secs] %2u threads: %11lu ops, %7lu (avg: %7lu) ops/sec, %s/sec (avg: %s/sec), %5.2f (avg: %5.2f) msec latency, real throughput %.2lf ops/sec \r",
             run_id, progress, (unsigned int) (duration / 1000000), active_threads, total_ops, cur_ops_sec, ops_sec, cur_bytes_str, bytes_str, cur_latency, avg_latency, curOpsSec);
 
+        iters++;
     } while (active_threads > 0);
 
     fprintf(stderr, "\n\n");
