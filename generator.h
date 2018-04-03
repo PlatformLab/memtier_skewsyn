@@ -11,7 +11,6 @@
 #include <unistd.h>
 
 enum DistributionType { NONE = 0, POISSON, UNIFORM };
-extern std::random_device rd;
 
 // Generator types are based on distribution type
 // Basic class will always return 0
@@ -25,6 +24,8 @@ class Generator {
     // Return false if no change is made
     virtual bool set_lambda(double lambda) { return false; }
     virtual double get_lambda() { return 0.0; }
+
+    static std::random_device rd;
 };
 
 // Poisson distribution, lambda is creations per second
