@@ -91,6 +91,46 @@ void benchmark_log(int level, const char *fmt, ...)
     va_end(args);
 }
 
+static void start_video_decoding(const char* videoFile, const char* prefix,
+                                 struct benchmark_config *cfg) {
+    char cmd[1000];
+    sprintf(cmd, "ssh -p 5515 %s \" nohup mkdir -p /scratch/mydata/logs/%s \" & ",
+            cfg->server, cfg->log_dir);
+    if (system(cmd) == -1) {
+        fprintf(stderr, "Fail to mkdir for logs \n");
+        exit(-1);
+    } else {
+        fprintf(stderr, "Success: mkdir /scrach/mydata/logs/%s \n", cfg->log_dir);
+    }
+
+    sprintf(cmd, "ssh -p 5515 %s "
+            "\" nohup /scratch/mydata/scripts/DecodeWithConfig.sh "
+            "/scratch/mydata/input/%s %s "
+            "/scratch/mydata/logs/%s/%s_%s > /dev/null "
+            "2> /dev/null < /dev/null &\"",
+            cfg->server,
+            videoFile, prefix, cfg->log_dir, cfg->log_qps_file, videoFile);
+    fprintf(stderr, "%s \n", cmd);
+    if (system(cmd) == -1) {
+        fprintf(stderr, "Fail to start video processes \n");
+        exit(-1);
+    } else {
+        fprintf(stderr, "Success: started video decoding %s \n", videoFile);
+    }
+}
+
+static void stop_video_decoding(struct benchmark_config *cfg) {
+    char cmd[1000];
+    sprintf(cmd, "ssh -p 5515 %s \"nohup kill -s SIGINT \\$(pidof x264)\" &",
+            cfg->server);
+    fprintf(stderr, "%s \n", cmd);
+    if (system(cmd) == -1) {
+        fprintf(stderr, "Fail to stop video processes \n");
+        exit(-1);
+    } else {
+        fprintf(stderr, "Success: stopped all video decoding processes. \n");
+    }
+}
 
 static void config_print(FILE *file, struct benchmark_config *cfg)
 {
@@ -340,7 +380,8 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         o_ir_distribution,
         o_log_dir,
         o_log_qps_file,
-        o_log_latency_file
+        o_log_latency_file,
+        o_videos
     };
     
     static struct option long_options[] = {
@@ -399,6 +440,7 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         { "log-dir",                    1, 0, o_log_dir},
         { "log-qpsfile",                1, 0, o_log_qps_file},
         { "log-latencyfile",            1, 0, o_log_latency_file},
+        { "videos",                     1, 0, o_videos},
         { NULL,                         0, 0, 0 }
     };
 
@@ -454,6 +496,13 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
                     break;
                 case o_log_dir:
                     cfg->log_dir = optarg;
+                    break;
+                case o_videos:
+                    cfg->num_videos = (int) strtoul(optarg, &endptr, 10);
+                    if (!endptr || *endptr != '\0') {
+                        fprintf(stderr, "error: num of videos must be greater than zero.\n");
+                        return -1;
+                    }
                     break;
                 case o_log_qps_file:
                     cfg->log_qps_file = optarg;
@@ -791,6 +840,11 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         cfg->log_latency_file = "latency.log";
     }
 
+    if (cfg->num_videos > 0) {
+        fprintf(stderr, "Number of background videos: %d \n", cfg->num_videos);
+    } else {
+        fprintf(stderr, "No background videos \n");
+    }
     return 0;
 }
 
@@ -886,6 +940,8 @@ void usage() {
             "      --log-dir                  Directory to store log files \n"
             "      --log-qpsfile              File name to store qps log \n"
             "      --log-latencyfile          File name to store latency log \n"
+            "VIDEO BACKGROUND Option:\n"
+            "      --videos=NUM               Number of background video processes to start\n"
             "\n"
             );
     
@@ -1061,6 +1117,18 @@ static void* start_master(void *arg) {
             fprintf(stderr, "Uniform distribution! \n");
     }
 
+    // Start video processes
+    if (cfg->num_videos > 0) {
+        char videoName[100];
+        char prefixstr[10];
+        for (int i = 1; i <= cfg->num_videos; ++i) {
+            sprintf(videoName, "sintel-1280-copy%d.y4m", i);
+            char prefix = 'a' + i - 1;
+            sprintf(prefixstr, "%c", prefix);
+            start_video_decoding(videoName, prefixstr, cfg);
+        }
+    }
+
     uint64_t currentTime = Cycles::rdtsc();
 
     uint64_t nextIntervalTime =
@@ -1107,6 +1175,11 @@ static void* start_master(void *arg) {
 
     master_finished = true;
     fprintf(stderr, "[STATS] should send out %ld reqs \n", shouldCount);
+
+    // Stop video processes
+    if (cfg->num_videos > 0) {
+        stop_video_decoding(cfg);
+    }
     return NULL;
 }
 

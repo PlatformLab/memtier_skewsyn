@@ -98,6 +98,9 @@ struct benchmark_config {
     const char *log_dir;
     const char *log_qps_file;
     const char *log_latency_file;
+
+    // Background video tasks
+    int num_videos;
 };
 
 
