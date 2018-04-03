@@ -24,3 +24,15 @@ cmd="./memtier_benchmark -s $server -p 11211 -P memcache_binary --clients=1 \
 # execute the commnad
 echo $cmd
 $cmd
+
+# Then warm up the dataset
+let "reqs = $reqs * 2"
+cmd="./memtier_benchmark -s $server -p 11211 -P memcache_binary --clients=1 \
+    --threads 16 --ratio 0:1 --run-count=1 --pipeline=100 \
+    --key-minimum=$keymin --key-maximum=$keymax \
+    --data-size=$datasize --random-data --hide-histogram \
+    --key-pattern=P:P --requests=$reqs"
+
+#execute the command
+echo $cmd
+$cmd
