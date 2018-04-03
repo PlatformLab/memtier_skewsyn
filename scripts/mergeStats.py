@@ -10,7 +10,7 @@ import math
 
 # Usage: mergeStats.py <input_directory> <output_prefix>
 # This script will merge all stats in the direcotry and write to the output
-# files, one for average and one for median.  
+# files, one for average and one for median.
 # Which means it will calculate the avergage and the mean number of each
 # column and row.
 
@@ -31,7 +31,7 @@ def write_csv(name, outputData):
     with open(name, 'w') as csvfile:
         fieldnames = [x for x in outputData[0]]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        
+
         writer.writeheader()
         for data in outputData:
             writer.writerow(data)
@@ -53,7 +53,7 @@ def ensure_output(outputPath):
     ensure_parent(outputPath)
     # Make sure we don't merge the previous merged file
     try:
-        os.remove(outputPath)    
+        os.remove(outputPath)
     except OSError:
         pass
 
@@ -99,8 +99,12 @@ def main():
                 if not math.isnan(tmpData):
                     tmpList.append(float(data[l][key]))
             if len(tmpList) > 0:
-                tmpdata[key] = mean(tmpList)
-                tmpdata2[key] = median(tmpList)
+                if (key == "Skew") or (key == "Goal"):
+                    tmpdata[key] = tmpList[0] # Just use the first one
+                    tmpdata2[key] = tmpList[0]
+                else:
+                    tmpdata[key] = mean(tmpList)
+                    tmpdata2[key] = median(tmpList)
             else:
                 tmpdata[key] = float('nan')
                 tmpdata2[key] = float('nan')
