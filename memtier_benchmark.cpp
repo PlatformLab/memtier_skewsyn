@@ -51,6 +51,31 @@ bool master_finished = false;
 // QPS for each clieint on each server thread
 std::vector<double> qpsPerClient;
 
+// A global array to store SET latencies
+uint64_t* setLatencies = NULL;
+
+// Atomic variable to store current index in the SET array
+std::atomic<uint32_t> setArrayIndex;
+
+// A global array to store GET latencies
+uint64_t* getLatencies = NULL;
+
+// Atomic variable to store current index in the GET array
+std::atomic<uint32_t> getArrayIndex;
+
+// The values of arrayIndex for SET/GET array before each change in the load,
+// which we can use later to store latencies as well as total throughput.
+static std::vector<uint64_t> setIndices;
+static std::vector<uint64_t> getIndices;
+
+// An array to store the time stamp  of each interval start, which we can use
+// this array to calculate the duration of each time interval
+static std::vector<uint64_t> timeStamps;
+
+// Power multiplier for the latency entries
+int ARRAY_EXP = 26; // We can record at most 2^26 = 67108864 latencies
+size_t MAX_ENTRIES;
+
 struct Interval {
     int64_t timeToRun; // The time (in ns) we spend on this interval
     double requestsPerSecond;
@@ -62,6 +87,12 @@ static size_t numIntervals; // Num of intervals in the config file
 static int log_level = 0;
 static double currGoalQPS = 0.0;
 static double currentSkew = 0.0;
+
+// Convert timeval to uint64_t
+static uint64_t timeval_to_ts(struct timeval a)
+{
+    return (uint64_t)a.tv_sec * 1000000 + (uint64_t)a.tv_usec;
+}
 
 void benchmark_log_file_line(int level, const char *filename, unsigned int line, const char *fmt, ...)
 {
@@ -1129,6 +1160,9 @@ static void* start_master(void *arg) {
         }
     }
 
+    // Our workload must start after this point
+    PerfUtils::Util::serialize();
+
     uint64_t currentTime = Cycles::rdtsc();
 
     uint64_t nextIntervalTime =
@@ -1180,6 +1214,7 @@ static void* start_master(void *arg) {
     if (cfg->num_videos > 0) {
         stop_video_decoding(cfg);
     }
+
     return NULL;
 }
 
@@ -1195,9 +1230,102 @@ static void join_master(pthread_t tid) {
     return;
 }
 
+static void process_results(std::string filePath) {
+    FILE *latencyLog = fopen(filePath.c_str(), "w");
+    if (latencyLog == NULL) {
+        fprintf(stderr, "Fail to open log file: %s \n", filePath.c_str());
+        return;
+    }
+    fprintf(stderr, "Storing latency log to %s \n", filePath.c_str());
+
+    // Sanity check
+    if ((getArrayIndex.load() > MAX_ENTRIES) ||
+        (setArrayIndex.load() > MAX_ENTRIES)) {
+        fprintf(stderr, "Benchmark wrote past the end of latency array."
+                "Assuming memory corruption. Final index writtern = %u,"
+                "Max entries: %lu",
+                std::max(getArrayIndex.load(), setArrayIndex.load()),
+                MAX_ENTRIES);
+        abort();
+    }
+    fprintf(stderr, " %u entries for setLatencies and %u for getLatencies \n",
+            setArrayIndex.load(), getArrayIndex.load());
+
+    fprintf(latencyLog, "DurationInUsec,50%% Latency GET,90%% GET,99%% GET,"
+            "Min GET,Max GET,50%% SET,90%% SET,99%% SET,Min SET,Max SET,"
+            "Throghput GET,Throughput SET\n");
+
+    char outbuff[1024];
+    for (size_t i = 1; i < getIndices.size(); ++i) {
+        double durationOfInterval = timeStamps[i] - timeStamps[i-1];
+
+        Statistics mathStatsGet;
+        Statistics mathStatsSet;
+
+        uint64_t getEntries = 1.0; // At least one entry
+        uint64_t setEntries = 1.0;
+        // Get Latency statistics
+        // Note that this computation will modify data
+        if (getArrayIndex.load() > 0) {
+            getEntries = getIndices[i] - getIndices[i-1];
+        }
+        mathStatsGet =
+            computeStatistics(getLatencies + getIndices[i-1], getEntries);
+
+        if (setArrayIndex.load() > 0) {
+            setEntries = setIndices[i] - setIndices[i-1];
+        }
+        mathStatsSet =
+            computeStatistics(setLatencies + setIndices[i-1], setEntries);
+
+        double getThroughput =
+            (getIndices[i] - getIndices[i-1]) * 1000000.0 / durationOfInterval;
+        double setThroughput =
+            (setIndices[i] - setIndices[i-1]) * 1000000.0 / durationOfInterval;
+
+        sprintf(outbuff,
+                "%.6lf,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%.2f,%.2f\n",
+                durationOfInterval, mathStatsGet.median, mathStatsGet.P90,
+                mathStatsGet.P99, mathStatsGet.min, mathStatsGet.max,
+                mathStatsSet.median, mathStatsSet.P90, mathStatsSet.P99,
+                mathStatsSet.min, mathStatsSet.max,
+                getThroughput, setThroughput);
+
+        if (i == 1) {
+            // Duplicate the first line! For figures
+            char dupBuff[1024];
+            sprintf(dupBuff, "0.0");
+            strcpy(dupBuff + strlen(dupBuff), outbuff + strlen(dupBuff));
+            fprintf(latencyLog, "%s", dupBuff);
+        }
+
+        fprintf(latencyLog, "%s", outbuff);
+    }
+
+    fclose(latencyLog);
+}
+
 run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj_gen)
 {
     fprintf(stderr, "[RUN #%u] Preparing benchmark client...\n", run_id);
+
+    // Page in our data store
+    MAX_ENTRIES = 1L << ARRAY_EXP;
+    setLatencies = new uint64_t[MAX_ENTRIES];
+    getLatencies = new uint64_t[MAX_ENTRIES];
+    if ((setLatencies == NULL) || (getLatencies == NULL)) {
+        fprintf(stderr, "Failed to allocate log entries! \n");
+        exit(-1);
+    }
+    memset(setLatencies, 0, MAX_ENTRIES * sizeof(uint64_t));
+    memset(getLatencies, 0, MAX_ENTRIES * sizeof(uint64_t));
+
+    setArrayIndex.store(0);
+    getArrayIndex.store(0);
+
+    // Initial elements in the arrays
+    setIndices.push_back(setArrayIndex);
+    getIndices.push_back(getArrayIndex);
 
     // prepare threads data
     std::vector<cg_thread*> threads;
@@ -1225,6 +1353,8 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     struct timeval curstartTime, prevstartTime, startTime, stopTime;
     gettimeofday(&prevstartTime, NULL);
     startTime = prevstartTime;
+
+    timeStamps.push_back(timeval_to_ts(startTime));
 
     unsigned long int prev_ops = 0;
     unsigned long int prev_bytes = 0;
@@ -1280,25 +1410,16 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     filePath = logDir + "/" + cfg->log_qps_file;
     FILE *qpsLog = fopen(filePath.c_str(), "w");
 
-    filePath = logDir  + "/" + cfg->log_latency_file;
-    FILE *latencyLog = fopen(filePath.c_str(), "w");
-
     fprintf(stderr, "Storing QPS log to %s/%s \n", cfg->log_dir, cfg->log_qps_file);
-    fprintf(stderr, "Storing latency log to %s/%s \n", cfg->log_dir,
-            cfg->log_latency_file);
     fprintf(qpsLog, "TimeInUSecSinceEpoch,DurationInSec,Skew,Goal");
-    fprintf(latencyLog, "TimeInUSecSinceEpoch");
 
     for (int tid = 0; tid < serverThreads; ++tid) {
         fprintf(qpsLog, ",tid%02d", tid);
-        fprintf(latencyLog, ",tid%02d_(us)", tid);
     }
 
     fprintf(qpsLog, ",Total\n");
-    fprintf(latencyLog, "\n");
 
     fflush(qpsLog);
-    fflush(latencyLog);
     double prevSkew = currentSkew;
     double prevcurrGoalQPS = currGoalQPS;
 #endif
@@ -1329,6 +1450,10 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         double curDuration = (curstartTime.tv_sec - prevstartTime.tv_sec) +
                              ((curstartTime.tv_usec - prevstartTime.tv_usec) / 1000000.0);
 
+        // Collect latency, throughput information from the past interval
+        setIndices.push_back(setArrayIndex.load());
+        getIndices.push_back(getArrayIndex.load());
+        timeStamps.push_back(timeval_to_ts(curstartTime));
         for (std::vector<cg_thread*>::iterator i = threads.begin(); i != threads.end(); i++) {
             if (!(*i)->m_finished)
                 active_threads++;
@@ -1378,7 +1503,6 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
             curstartTime.tv_sec * 1000000 + curstartTime.tv_usec;
         sprintf(outputBuff, "%lu,%.6lf,%6lf,%.2lf", curTimeStamp, curDuration,
                 prevSkew, prevcurrGoalQPS);
-        fprintf(latencyLog, "%lu", curTimeStamp);
         double totalQPS = 0.0;
         for (int tid = 0; tid < serverThreads; ++tid) {
             currOpsPerTid[tid] = totalOpsPerTid[tid] - prevOpsPerTid[tid];
@@ -1388,11 +1512,6 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
             double currOps = currOpsPerTid[tid] / curDuration;
             totalQPS += currOps;
             sprintf(outputBuff + strlen(outputBuff), ",%.2lf", currOps);
-            fprintf(latencyLog, ",%.3lf", currLatencyPerTid[tid]);
-//            fprintf(stderr, "ServerTid: %d, currOps/sec: %.2lf, "
-//                    "currLatency: %.3lf us \n",
-//                    tid, currOps,
-//                    currLatencyPerTid[tid]);
             prevOpsPerTid[tid] = totalOpsPerTid[tid];
             prevLatencyPerTid[tid] = totalLatencyPerTid[tid];
         }
@@ -1406,10 +1525,7 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
             fprintf(qpsLog, "%s", dupBuff);
         }
         fprintf(qpsLog, "%s", outputBuff);
-        fprintf(latencyLog, "\n");
-//        fprintf(stderr, "\n");
         fflush(qpsLog);
-        fflush(latencyLog);
 
         prevSkew = currentSkew; // because we are logging for the last duration
         prevcurrGoalQPS = currGoalQPS;  // we must update later
@@ -1515,6 +1631,10 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         threads.erase(threads.begin());
         delete t;
     }
+
+    // Save to log file
+    process_results(std::string(logDir) + "/" + cfg->log_latency_file);
+
 #ifdef PER_CLIENT
     delete []prevOpsPerClient;
     delete []currOpsPerClient;
@@ -1533,8 +1653,14 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     delete []totalLatencyPerTid;
 
     fclose(qpsLog);
-    fclose(latencyLog);
 #endif
+
+    // Release resources
+    delete[] setLatencies;
+    delete[] getLatencies;
+    setIndices.clear();
+    getIndices.clear();
+    timeStamps.clear();
 
     return stats;
 }

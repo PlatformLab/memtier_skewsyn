@@ -24,6 +24,8 @@
 #include "config_types.h"
 #include "generator.h"
 #include "PerfUtils/Cycles.h"
+#include "PerfUtils/Stats.h"
+#include "PerfUtils/Util.h"
 
 #define LOGLEVEL_ERROR 0
 #define LOGLEVEL_DEBUG 1
@@ -109,6 +111,14 @@ extern void benchmark_log(int level, const char *fmt, ...);
 
 extern bool master_finished; // master thread finished or not?
 extern std::vector<double> qpsPerClient;
+
+// Latency recording related
+extern uint64_t* setLatencies;
+extern std::atomic<uint32_t> setArrayIndex;
+extern uint64_t* getLatencies;
+extern std::atomic<uint32_t> getArrayIndex;
+extern int ARRAY_EXP;
+extern size_t MAX_ENTRIES;
 
 #endif /* _MEMTIER_BENCHMARK_H */
 
