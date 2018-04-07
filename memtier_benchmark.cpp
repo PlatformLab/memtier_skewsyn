@@ -1251,8 +1251,9 @@ static void process_results(std::string filePath) {
     fprintf(stderr, " %u entries for setLatencies and %u for getLatencies \n",
             setArrayIndex.load(), getArrayIndex.load());
 
-    fprintf(latencyLog, "DurationInUsec,50%% Latency GET,90%% GET,99%% GET,"
-            "Min GET,Max GET,50%% SET,90%% SET,99%% SET,Min SET,Max SET,"
+    fprintf(latencyLog, "TimeInUSecSinceEpoch,DurationInUsec,"
+            "50%% Latency GET,90%% GET,99%% GET,Min GET,Max GET,"
+            "50%% SET,90%% SET,99%% SET,Min SET,Max SET,"
             "Throghput GET,Throughput SET\n");
 
     char outbuff[1024];
@@ -1284,8 +1285,8 @@ static void process_results(std::string filePath) {
             (setIndices[i] - setIndices[i-1]) * 1000000.0 / durationOfInterval;
 
         sprintf(outbuff,
-                "%.6lf,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%.2f,%.2f\n",
-                durationOfInterval, mathStatsGet.median, mathStatsGet.P90,
+                "%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%.2f,%.2f\n",
+                mathStatsGet.median, mathStatsGet.P90,
                 mathStatsGet.P99, mathStatsGet.min, mathStatsGet.max,
                 mathStatsSet.median, mathStatsSet.P90, mathStatsSet.P99,
                 mathStatsSet.min, mathStatsSet.max,
@@ -1293,13 +1294,11 @@ static void process_results(std::string filePath) {
 
         if (i == 1) {
             // Duplicate the first line! For figures
-            char dupBuff[1024];
-            sprintf(dupBuff, "0.0");
-            strcpy(dupBuff + strlen(dupBuff), outbuff + strlen(dupBuff));
-            fprintf(latencyLog, "%s", dupBuff);
+            fprintf(latencyLog, "%lu,%.6lf,%s", timeStamps[0], 0.0, outbuff);
         }
 
-        fprintf(latencyLog, "%s", outbuff);
+        fprintf(latencyLog, "%lu,%.6lf,%s",
+                timeStamps[i], durationOfInterval, outbuff);
     }
 
     fclose(latencyLog);
