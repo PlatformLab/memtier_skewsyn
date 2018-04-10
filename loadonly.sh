@@ -9,6 +9,10 @@ if [[ "$#" -ne 4 ]]; then
     exit
 fi
 
+# Go to the correct directory
+dirPATH=$(dirname $(readlink -f $0))
+cd ${dirPATH}
+
 server=$1
 keymin=$2
 keymax=$3
