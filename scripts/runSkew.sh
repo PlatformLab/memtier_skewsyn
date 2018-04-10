@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# This script is used to load data into memcached server
+# This script is used to run skewed workload
 
 scriptname=`basename "$0"`
 if [[ "$#" -ne 7 ]]; then
@@ -14,6 +14,7 @@ fi
 dirPATH=$(dirname $(dirname $(readlink -f $0)))
 cd ${dirPATH}
 
+originalMemtier="$HOME/memtier_benchmark"
 server=$1
 keymin=$2
 keymax=$3
@@ -28,13 +29,21 @@ ratio="0:1"
 pipeline=100
 irdist="POISSON"
 
-logdir=${prefix}_iters${iters}_logs
+videos=0 # No background videos
+
+logdir=exp_logs/${prefix}_iters${iters}_skew_logs
 qpsprefix="qps"
 latencyprefix="latency"
-runlog=${prefix}_iters${iters}_runlog.log
-echo "Saving logs to: $log_dir"
+runlog=exp_logs/${prefix}_iters${iters}_runlog.log
+echo "Saving logs to: $logdir"
 mkdir -p $logdir
-rm $logdir/* # Clear previous logs
+rm -rf $logdir/* # Clear previous logs
+rm $runlog
+
+# Load data into Memcached and warm up
+cmd="bash $originalMemtier/loadonly.sh $server $keymin $keymax $datasize"
+echo $cmd
+$cmd >> $runlog 2>&1
 
 # Execute experiments multiple times
 for iter in `seq 1 $iters`;
@@ -49,7 +58,8 @@ do
         --key-pattern=R:R --run-count=1 --distinct-client-seed --randomize \
         --test-time=1 -b \
         --config-file=$benchfile --ir-dist=$irdist --log-dir=$logdir \
-        --log-qpsfile=$logqpsfile --log-latencyfile=$latencyfile"
+        --log-qpsfile=$logqpsfile --log-latencyfile=$latencyfile \
+        --videos=$videos"
 
     # execute the commnad
     echo $cmd

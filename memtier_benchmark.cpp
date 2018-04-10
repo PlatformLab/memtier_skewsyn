@@ -134,13 +134,17 @@ static void start_video_decoding(const char* videoFile, const char* prefix,
         fprintf(stderr, "Success: mkdir /scrach/mydata/logs/%s \n", cfg->log_dir);
     }
 
+    // Get rid of the extension of the file
+    std::string filePrefix(cfg->log_qps_file);
+    filePrefix.erase(filePrefix.find_last_of("."), std::string::npos);
+
     sprintf(cmd, "ssh -p 5515 %s "
             "\" nohup /scratch/mydata/scripts/DecodeWithConfig.sh "
             "/scratch/mydata/input/%s %s "
             "/scratch/mydata/logs/%s/%s_%s > /dev/null "
             "2> /dev/null < /dev/null &\"",
             cfg->server,
-            videoFile, prefix, cfg->log_dir, cfg->log_qps_file, videoFile);
+            videoFile, prefix, cfg->log_dir, filePrefix.c_str(), videoFile);
     fprintf(stderr, "%s \n", cmd);
     if (system(cmd) == -1) {
         fprintf(stderr, "Fail to start video processes \n");
