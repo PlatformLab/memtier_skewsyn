@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# This script is used to run skewed workload
+# This script is used to run synthetic workload
 
 scriptname=`basename "$0"`
-if [[ "$#" -ne 7 ]]; then
+if [[ "$#" -ne 8 ]]; then
     echo "Usage: $scriptname <server> <key-min> <key-max> <data-size> " \
-         "<iterations> <skew_bench> <prefix: arachne/origin>"
-    echo "Example: $scriptname n1 100000 200000 32 5 workloads/Skew.bench arachne"
+         "<iterations> <synthetic_bench> <num-videos> <prefix: arachne/origin>"
+    echo "Example: $scriptname n1 100000 200000 32 5 workloads/LoadEstimator.bench 1 arachne"
     exit
 fi
 
@@ -21,20 +21,19 @@ keymax=$3
 datasize=$4
 iters=$5
 benchfile=$6
-prefix=$7
+videos=$7
+prefix=$8
 
 clients=16
-threads=32
+threads=16
 ratio="0:1"
 pipeline=100
 irdist="POISSON"
 
-videos=0 # No background videos
-
-logdir=exp_logs/${prefix}_iters${iters}_skew_logs
+logdir=exp_logs/${prefix}_iters${iters}_synthetic_logs
 qpsprefix="qps"
 latencyprefix="latency"
-runlog=exp_logs/${prefix}_iters${iters}_skew_runlog.log
+runlog=exp_logs/${prefix}_iters${iters}_synthetic_runlog.log
 echo "Saving logs to: $logdir"
 mkdir -p $logdir
 rm -rf $logdir/* # Clear previous logs
@@ -63,7 +62,8 @@ do
 
     # execute the commnad
     echo $cmd
-    $cmd >> $runlog 2>&1
+    # $cmd >> $runlog 2>&1
+    $cmd 2>&1 | tee -a $runlog
 done
 
 # Move throughput logs and latency logs to different directory
