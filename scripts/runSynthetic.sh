@@ -27,7 +27,7 @@ prefix=$8
 clients=16
 threads=16
 ratio="0:1"
-pipeline=100
+pipeline=10
 irdist="POISSON"
 
 logdir=exp_logs/${prefix}_iters${iters}_synthetic_logs
