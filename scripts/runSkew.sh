@@ -49,7 +49,7 @@ $cmd >> $runlog 2>&1
 for iter in `seq 1 $iters`;
 do
     logqpsfile=${qpsprefix}_iter${iter}.csv
-    latencyfile=${latencyprefix}_iter${iter}.csv
+    #latencyfile=${latencyprefix}_iter${iter}.csv
     cmd="./memtier_benchmark -s $server -p 11211 -P memcache_binary \
         --clients $clients --threads $threads --ratio $ratio \
         --pipeline=$pipeline \
@@ -58,12 +58,14 @@ do
         --key-pattern=R:R --run-count=1 --distinct-client-seed --randomize \
         --test-time=1 -b \
         --config-file=$benchfile --ir-dist=$irdist --log-dir=$logdir \
-        --log-qpsfile=$logqpsfile --log-latencyfile=$latencyfile \
+        --log-qpsfile=$logqpsfile \
         --videos=$videos"
+        #--log-latencyfile=$latencyfile \
 
     # execute the commnad
     echo $cmd
-    $cmd >> $runlog 2>&1
+    # $cmd >> $runlog 2>&1
+    $cmd 2>&1 | tee -a $runlog
 done
 
 # Move throughput logs and latency logs to different directory

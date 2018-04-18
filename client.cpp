@@ -814,12 +814,14 @@ void run_stats::roll_cur_stats(struct timeval* ts)
 
 void run_stats::update_get_op(struct timeval* ts, unsigned int bytes, unsigned int latency, unsigned int hits, unsigned int misses)
 {
-    uint32_t index = getArrayIndex.fetch_add(1);
-    if (index > MAX_ENTRIES) {
-        fprintf(stderr, "Death by getArrayIndex out of bounds: %u \n", index);
-        exit(0);
+    if (getLatencies!= NULL) {
+        uint32_t index = getArrayIndex.fetch_add(1);
+        if (index > MAX_ENTRIES) {
+            fprintf(stderr, "Death by getArrayIndex out of bounds: %u \n", index);
+            exit(0);
+        }
+        getLatencies[index] = latency;
     }
-    getLatencies[index] = latency;
 
     roll_cur_stats(ts);
     m_cur_stats.m_bytes_get += bytes;
@@ -838,12 +840,14 @@ void run_stats::update_get_op(struct timeval* ts, unsigned int bytes, unsigned i
 
 void run_stats::update_set_op(struct timeval* ts, unsigned int bytes, unsigned int latency)
 {
-    uint32_t index = setArrayIndex.fetch_add(1);
-    if (index > MAX_ENTRIES) {
-        fprintf(stderr, "Death by setArrayIndex out of bounds: %u \n", index);
-        exit(0);
+    if (setLatencies != NULL) {
+        uint32_t index = setArrayIndex.fetch_add(1);
+        if (index > MAX_ENTRIES) {
+            fprintf(stderr, "Death by setArrayIndex out of bounds: %u \n", index);
+            exit(0);
+        }
+        setLatencies[index] = latency;
     }
-    setLatencies[index] = latency;
 
     roll_cur_stats(ts);
     m_cur_stats.m_bytes_set += bytes;

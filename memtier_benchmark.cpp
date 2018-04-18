@@ -871,10 +871,11 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         cfg->log_qps_file = "throughput.log";
     }
 
-    if (cfg->log_latency_file == NULL) {
-        cfg->log_latency_file = "latency.log";
-    }
-
+    // By default don't record latency!
+//    if (cfg->log_latency_file == NULL) {
+//        cfg->log_latency_file = "latency.log";
+//    }
+//
     if (cfg->num_videos > 0) {
         fprintf(stderr, "Number of background videos: %d \n", cfg->num_videos);
     } else {
@@ -1314,15 +1315,20 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
 
     // Page in our data store
     MAX_ENTRIES = 1L << ARRAY_EXP;
-    setLatencies = new uint64_t[MAX_ENTRIES];
-    getLatencies = new uint64_t[MAX_ENTRIES];
-    if ((setLatencies == NULL) || (getLatencies == NULL)) {
-        fprintf(stderr, "Failed to allocate log entries! \n");
-        exit(-1);
-    }
-    memset(setLatencies, 0, MAX_ENTRIES * sizeof(uint64_t));
-    memset(getLatencies, 0, MAX_ENTRIES * sizeof(uint64_t));
 
+    if (cfg->log_latency_file != NULL) {
+        setLatencies = new uint64_t[MAX_ENTRIES];
+        getLatencies = new uint64_t[MAX_ENTRIES];
+        if ((setLatencies == NULL) || (getLatencies == NULL)) {
+            fprintf(stderr, "Failed to allocate log entries! \n");
+            exit(-1);
+        }
+        memset(setLatencies, 0, MAX_ENTRIES * sizeof(uint64_t));
+        memset(getLatencies, 0, MAX_ENTRIES * sizeof(uint64_t));
+    } else {
+        setLatencies = NULL;
+        getLatencies = NULL;
+    }
     setArrayIndex.store(0);
     getArrayIndex.store(0);
 
@@ -1635,8 +1641,10 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
         delete t;
     }
 
-    // Save to log file
-    process_results(std::string(logDir) + "/" + cfg->log_latency_file);
+    // Save to log file only if we provide the file name
+    if (cfg->log_latency_file != NULL) {
+        process_results(std::string(logDir) + "/" + cfg->log_latency_file);
+    }
 
 #ifdef PER_CLIENT
     delete []prevOpsPerClient;
@@ -1659,8 +1667,10 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
 #endif
 
     // Release resources
-    delete[] setLatencies;
-    delete[] getLatencies;
+    if (setLatencies != NULL)
+        delete[] setLatencies;
+    if (getLatencies != NULL)
+        delete[] getLatencies;
     setIndices.clear();
     getIndices.clear();
     timeStamps.clear();
