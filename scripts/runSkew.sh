@@ -28,6 +28,7 @@ threads=32
 ratio="0:1"
 pipeline=100
 irdist="POISSON"
+keyprefix="memtierxxxxxxxxxxxxxxx-" # Pad key to achieve 30-byte
 
 videos=0 # No background videos
 
@@ -41,7 +42,7 @@ rm -rf $logdir/* # Clear previous logs
 rm $runlog
 
 # Load data into Memcached and warm up
-cmd="bash $originalMemtier/loadonly.sh $server $keymin $keymax $datasize"
+cmd="bash $originalMemtier/loadonly.sh $server $keymin $keymax $datasize $keyprefix"
 echo $cmd
 $cmd >> $runlog 2>&1
 
@@ -55,6 +56,7 @@ do
         --pipeline=$pipeline \
         --key-minimum=$keymin --key-maximum=$keymax \
         --data-size=$datasize --random-data --hide-histogram \
+        --key-prefix=$keyprefix \
         --key-pattern=R:R --run-count=1 --distinct-client-seed --randomize \
         --test-time=1 -b \
         --config-file=$benchfile --ir-dist=$irdist --log-dir=$logdir \

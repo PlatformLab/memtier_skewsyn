@@ -1858,6 +1858,7 @@ int main(int argc, char *argv[])
     
     if (!cfg.data_import || cfg.generate_keys) {
         obj_gen->set_key_prefix(cfg.key_prefix);
+        fprintf(stderr, "key prefix: %s \n", cfg.key_prefix);
         obj_gen->set_key_range(cfg.key_minimum, cfg.key_maximum);
     }
     if (cfg.key_stddev>0 || cfg.key_median>0) {
