@@ -26,9 +26,9 @@ videos=$7
 prefix=$8
 
 clients=16
-threads=32
+threads=20
 ratio="0:1"
-pipeline=4
+pipeline=10
 irdist="POISSON"
 keyprefix="memtierxxxxxxxxxxxxxxx-" # Pad key to achieve 30-byte
 keypattern="G:G"
