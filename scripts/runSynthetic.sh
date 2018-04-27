@@ -25,8 +25,8 @@ benchfile=$6
 videos=$7
 prefix=$8
 
-clients=16
-threads=20
+clients=20
+threads=16
 ratio="0:1"
 pipeline=10
 irdist="POISSON"
@@ -58,7 +58,7 @@ do
             shift
         done
 
-        clientlogdir=$HOME/client_logs/$logdir
+        clientlogdir=$HOME/memtier_benchmark_skewsyn/$logdir
         clientbench=$HOME/memtier_benchmark_skewsyn/$benchfile
         mkdir -p $clientlogdir
         rm -rf $clientlogdir/*
@@ -67,7 +67,7 @@ do
         do
             echo "Starting client: $client ..."
             clientqpsfile=${qpsprefix}_iter${iter}_${client}.csv
-            clientRunLog=$HOME/client_logs/${runlog}_${client}
+            clientRunLog=$HOME/memtier_benchmark_skewsyn/${runlog}_${client}
             cmd="$HOME/memtier_benchmark_skewsyn/memtier_benchmark -s $server \
                  -p 11211 -P memcache_binary --clients $clients --threads $threads \
                  --ratio $ratio --pipeline=$pipeline \

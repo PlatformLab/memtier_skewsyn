@@ -88,6 +88,9 @@ static int log_level = 0;
 static double currGoalQPS = 0.0;
 static double currentSkew = 0.0;
 
+// Maximum number of iterations of video processes
+static int maxIters = 3;
+
 // Convert timeval to uint64_t
 static uint64_t timeval_to_ts(struct timeval a)
 {
@@ -141,10 +144,11 @@ static void start_video_decoding(const char* videoFile, const char* prefix,
     sprintf(cmd, "ssh -p 5515 %s "
             "\" nohup /scratch/mydata/scripts/DecodeWithConfig.sh "
             "/scratch/mydata/input/%s %s "
-            "/scratch/mydata/logs/%s/%s_%s > /dev/null "
+            "/scratch/mydata/logs/%s/%s_%s %d > /dev/null "
             "2> /dev/null < /dev/null &\"",
             cfg->server,
-            videoFile, prefix, cfg->log_dir, filePrefix.c_str(), videoFile);
+            videoFile, prefix, cfg->log_dir, filePrefix.c_str(), videoFile,
+            maxIters);
     fprintf(stderr, "%s \n", cmd);
     if (system(cmd) == -1) {
         fprintf(stderr, "Fail to start video processes \n");
@@ -156,6 +160,19 @@ static void start_video_decoding(const char* videoFile, const char* prefix,
 
 static void stop_video_decoding(struct benchmark_config *cfg) {
     char cmd[1000];
+
+    // First, kill the script
+    sprintf(cmd, "ssh -p 5515 %s \"nohup kill -9 \\$(cat /tmp/x264.pid)\" &",
+            cfg->server);
+    fprintf(stderr, "%s \n", cmd);
+    if (system(cmd) == -1) {
+        fprintf(stderr, "Fail to stop video script \n");
+        exit(-1);
+    } else {
+        fprintf(stderr, "Success: stopped video script. \n");
+    }
+
+    // Need to kill all video processes!
     sprintf(cmd, "ssh -p 5515 %s \"nohup kill -s SIGINT \\$(pidof x264)\" &",
             cfg->server);
     fprintf(stderr, "%s \n", cmd);
