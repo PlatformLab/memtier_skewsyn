@@ -1438,7 +1438,7 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
     int iters = 0;
     do {
         active_threads = 0;
-        usleep(200000); // Sleep 200 ms
+        sleep(1); // Sleep 1 sec
 
         total_ops = 0;
         unsigned long int total_bytes = 0;

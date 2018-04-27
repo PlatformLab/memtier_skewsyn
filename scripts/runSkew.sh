@@ -24,8 +24,8 @@ iters=$5
 benchfile=$6
 prefix=$7
 
-clients=16
-threads=32
+clients=32
+threads=16
 ratio="0:1"
 pipeline=100
 irdist="POISSON"
