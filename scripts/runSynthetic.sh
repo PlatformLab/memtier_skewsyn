@@ -91,6 +91,7 @@ do
         pipeline=1
         irdist="UNIFORM"
         benchfile=workloads/Synthetic16-master.bench
+        #benchfile=workloads/Synthetic16_1sec-master.bench
     fi
 
     # Master usually run in non-blocking mode
