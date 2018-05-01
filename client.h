@@ -265,6 +265,7 @@ public:
 
     void merge_run_stats(run_stats* target);
     std::vector<client*> m_clients;
+    static pthread_mutex_t m_conn_mutex; // used to serialize assignment to memcached server
 };
 
 

@@ -54,6 +54,7 @@
 using PerfUtils::Cycles;
 
 pthread_mutex_t client::m_skew_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t client_group::m_conn_mutex = PTHREAD_MUTEX_INITIALIZER;
 int client::skew_count = 0;
 int client::total_conns = 0;
 int client::real_conns = 0;
@@ -610,16 +611,21 @@ int client_group::create_clients(int num)
 
 int client_group::prepare(void)
 {
-   for (std::vector<client*>::iterator i = m_clients.begin(); i != m_clients.end(); i++) {
+    // Add a mutex here so that we can make sure server threads are spread
+    // across all client threads.
+    pthread_mutex_lock(&client_group::m_conn_mutex);
+    for (std::vector<client*>::iterator i = m_clients.begin(); i != m_clients.end(); i++) {
         client* c = *i;
         int ret = c->prepare();
 
         if (ret < 0) {
+            fprintf(stderr, "Fail to prepare client!\n");
+            pthread_mutex_unlock(&client_group::m_conn_mutex);
             return ret;
         }
-   }
-
-   return 0;
+    }
+    pthread_mutex_unlock(&client_group::m_conn_mutex);
+    return 0;
 }
 
 void client_group::run(void)
