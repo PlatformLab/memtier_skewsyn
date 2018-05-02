@@ -48,6 +48,8 @@ cmd="bash $originalMemtier/loadonly.sh $server $keymin $keymax $datasize $keypre
 echo $cmd
 $cmd >> $runlog 2>&1
 
+read -p "Press enter to continue"
+
 # Execute experiments multiple times
 for iter in `seq 1 $iters`;
 do
