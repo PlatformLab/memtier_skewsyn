@@ -1,114 +1,96 @@
-memtier_benchmark
-=================
+# memtier_skewsyn (Under Construction)
 
-memtier_benchmark is a command line utility developed by Redis Labs (formerly Garantia Data Ltd.) for load generation and bechmarking NoSQL key-value databases. It offers the following:
+Memcached skew and colocation workload benchmarking tool, modified from
+[memtier_benchmark](https://github.com/RedisLabs/memtier_benchmark).
+This repo contains two major branches:
+the original memtier_benchmark with `loadonly.sh` script (`master` branch);
+and the skew & colocation benchmark we used for the paper
+(`skewSynthetic` branch).
 
-* Support for both Redis and Memcache protocols (text and binary)
-* Multi-threaded multi-client execution
-* Multiple configuration options, including:
- * Read:Write ratio
- * Random and sequential key name pattern policies
- * Random or ranged key expiration
- * Redis cluster
- * ...and much more
+## Note
+If you are going to reproduce the experiments (especially with background video
+task), please contact us.
 
-Read more at:
+The main differences from memtier_benchmark are:
+1. It sends out requests independently without buffering. Original memtier_benchmark
+will buffer the pipelined requests and send out together.
 
-* [A High Throughput Benchmarking Tool for Redis and Memcached](https://redislabs.com/blog/memtier_benchmark-a-high-throughput-benchmarking-tool-for-redis-memcached)
-* [Pseudo-Random Data, Gaussian Access Pattern and Range Manipulation](https://redislabs.com/blog/new-in-memtier_benchmark-pseudo-random-data-gaussian-access-pattern-and-range-manipulation)
+2. We support Poisson and Uniform inter request time, plus the support for goal
+QPS.
 
-## Getting Started
+3. We add support of skewed load -- we can offer a different fraction of load on
+one of the memcached worker thread.
 
-### Prerequisites
+4. It can start background video processes remotely on the server machine.
 
-The following libraries are required for building:
+### How do I use memtier_skewsyn benchmark?
 
-* libevent 2.0.10 or newer.
-* libpcre 8.x.
+You need two directories for two branches: the `master` branch and `skewSynthetic`
+branch. We will use `master` branch to prepare dataset, and use `skewSynthetic`
+branch to do experiments.
 
-The following tools are required
-* autoconf
-* automake
-* GNU make
-* GCC C++ compiler
-
-### CentOS 6.x Prerequisites
-
-On a CentOS 6.4 system, use the following to install prerequisites:
-```
-# yum install autoconf automake make gcc-c++ 
-# yum install pcre-devel zlib-devel libmemcached-devel
-```
-
-CentOS 6.4 ships with older versions of libevent, which must be manually built
-and installed as follows:
-
-To download, build and install libevent-2.0.21:
-```
-$ wget https://github.com/downloads/libevent/libevent/libevent-2.0.21-stable.tar.gz
-$ tar xfz libevent-2.0.21-stable.tar.gz
-$ pushd libevent-2.0.21-stable
-$ ./configure
-$ make
-$ sudo make install
-$ popd
-```
-
-The above steps will install into /usr/local so it does not confict with the 
-distribution-bundled versions.  The last step is to set up the 
-PKG_CONFIG_PATH so configure can find the newly installed library.
+0. Clone this repo, switch to master branch, and compile.
 
 ```
-$ export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH}
+	MEMTIER_DIR=${HOME}/memtier_benchmark
+	git clone https://github.com/PlatformLab/memtier_skewsyn.git ${MEMTIER_DIR}
+	cd ${MEMTIER_DIR}
+	git fetch
+	git checkout master
+	autoreconf -ivf
+	./configure
+	make
 ```
 
-Then proceed to follow the build instructions below.
-
-
-### Ubuntu 12.x Prerequisites
-
-On recent Ubuntu versions, simply install all prerequisites as follows:
+1. Then clone the skewSynthetic branch.
 
 ```
-# apt-get install build-essential autoconf automake libpcre3-dev libevent-dev pkg-config zlib1g-dev
+	MEMTIER_SKEWSYN_DIR=${HOME}/memtier_skewsyn
+	git clone https://github.com/PlatformLab/memtier_skewsyn.git ${MEMTIER_SKEWSYN_DIR}
+	cd ${MEMTIER_SKEWSYN_DIR}
+	git fetch
+	git checkout skewSynthetic
 ```
 
-
-### Cluster mode
-
-In case where there is some asymmetry between the redis nodes, and user set
-the number of total requests with sequential key pattern options, it might be
-gaps in the generated keys.
-
-
-### Building and installing
-
-After downloading the source tree, use standard autoconf/automake commands::
-
+2. Recursively clone [Arachne super repository](https://github.com/PlatformLab/arachne-all)
+inside memtier_skewsyn top level directory.
 ```
-$ autoreconf -ivf
-$ ./configure
-$ make
-$ make install
+     git clone --recursive https://github.com/PlatformLab/arachne-all.git ${MEMTIER_SKEWSYN_DIR}/arachne-all
 ```
 
-## Using Docker
-
+3. Build the Arachne library with `./buildAll.sh` in the top level directory. We only use PerfUtil part of it,
+so no need to start core arbiter on the client machine.
 ```
-$ docker build -t memtier_benchmark .
-$ docker run --rm memtier_benchmark --help
-```
-
-## Using memtier_benchmark
-
-See the included manpage or run::
-
-```
-$ memtier_benchmark --help
+    cd ${MEMTIER_SKEWSYN_DIR}/arachne-all
+    ./buildAll.sh
 ```
 
-for command line options.
+4. Build memtier_skewsyn in top level directory
+```
+	autoreconf -ivf
+	./configure
+	make
+```
 
+5. Run benchmarks:
+You can use this benchmark directly from command line, or you can reproduce
+our experiments from the scripts in `${MEMTIER_SKEWSYN_DIR}/scripts/` directory.
+By default, logs will be saved in `${MEMTIER_SKEWSYN_DIR}/exp_logs`
 
+1) Skew benchmark, only uses 1 client machine:
+```
+./runSkew.sh <server> <key-min> <key-max> <data-size>  <iterations> <skew_bench> <log directory prefix: arachne/origin>
+```
+For example:
+```
+./runSkew.sh ${server} 1000000 9000000 200 1 workloads/Skew16.bench arachne_test
+```
 
-[![githalytics.com alpha](https://cruel-carlota.pagodabox.com/c1e8ecf15c469fbeb0e4eb12e8436c82 "githalytics.com")](http://githalytics.com/RedisLabs/memtier_benchmark)
+2) Colocation benchmark, uses 2 (or more) client machines:
+```
+./runSynthetic.sh <server> <key-min> <key-max> <data-size> <iterations> <synthetic_bench> <num-videos> <prefix: arachne/origin> [list of clients...]
+```
+For example:
+```
+./runSynthetic.sh ${server} 1000000 9000000 200 1 workloads/Synthetic16.bench 0 arachne_0vid ${client1}
+```

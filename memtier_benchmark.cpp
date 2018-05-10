@@ -128,7 +128,7 @@ void benchmark_log(int level, const char *fmt, ...)
 static void start_video_decoding(const char* videoFile, const char* prefix,
                                  struct benchmark_config *cfg) {
     char cmd[1000];
-    sprintf(cmd, "ssh -p 5515 %s \" nohup mkdir -p /scratch/mydata/logs/%s \" & ",
+    sprintf(cmd, "ssh -p 22 %s \" nohup mkdir -p /scratch/mydata/logs/%s \" & ",
             cfg->server, cfg->log_dir);
     if (system(cmd) == -1) {
         fprintf(stderr, "Fail to mkdir for logs \n");
@@ -141,7 +141,7 @@ static void start_video_decoding(const char* videoFile, const char* prefix,
     std::string filePrefix(cfg->log_qps_file);
     filePrefix.erase(filePrefix.find_last_of("."), std::string::npos);
 
-    sprintf(cmd, "ssh -p 5515 %s "
+    sprintf(cmd, "ssh -p 22 %s "
             "\" nohup /scratch/mydata/scripts/DecodeWithConfig.sh "
             "/scratch/mydata/input/%s %s "
             "/scratch/mydata/logs/%s/%s_%s %d > /dev/null "
@@ -162,7 +162,7 @@ static void stop_video_decoding(struct benchmark_config *cfg) {
     char cmd[1000];
 
     // First, kill the script
-    sprintf(cmd, "ssh -p 5515 %s \"nohup kill -9 \\$(cat /tmp/x264.pid)\" &",
+    sprintf(cmd, "ssh -p 22 %s \"nohup kill -9 \\$(cat /tmp/x264.pid)\" &",
             cfg->server);
     fprintf(stderr, "%s \n", cmd);
     if (system(cmd) == -1) {
@@ -173,7 +173,7 @@ static void stop_video_decoding(struct benchmark_config *cfg) {
     }
 
     // Need to kill all video processes!
-    sprintf(cmd, "ssh -p 5515 %s \"nohup kill -s SIGINT \\$(pidof x264)\" &",
+    sprintf(cmd, "ssh -p 22 %s \"nohup kill -s SIGINT \\$(pidof x264)\" &",
             cfg->server);
     fprintf(stderr, "%s \n", cmd);
     if (system(cmd) == -1) {
