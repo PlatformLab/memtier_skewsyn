@@ -77,20 +77,20 @@ You can use this benchmark directly from command line, or you can reproduce
 our experiments from the scripts in `${MEMTIER_SKEWSYN_DIR}/scripts/` directory.
 By default, logs will be saved in `${MEMTIER_SKEWSYN_DIR}/exp_logs`
 
-1) Skew benchmark, only uses 1 client machine:
-```
-./runSkew.sh <server> <key-min> <key-max> <data-size>  <iterations> <skew_bench> <log directory prefix: arachne/origin>
-```
-For example:
-```
-./runSkew.sh ${server} 1000000 9000000 200 1 workloads/Skew16.bench arachne_test
-```
+    1) Skew benchmark, only uses 1 client machine:
+    ```
+    ./runSkew.sh <server> <key-min> <key-max> <data-size>  <iterations> <skew_bench> <log directory prefix: arachne/origin>
+    ```
+    For example:
+    ```
+    ./runSkew.sh ${server} 1000000 9000000 200 1 workloads/Skew16.bench arachne_test
+    ```
 
-2) Colocation benchmark, uses 2 (or more) client machines:
-```
-./runSynthetic.sh <server> <key-min> <key-max> <data-size> <iterations> <synthetic_bench> <num-videos> <prefix: arachne/origin> [list of clients...]
-```
-For example:
-```
-./runSynthetic.sh ${server} 1000000 9000000 200 1 workloads/Synthetic16.bench 0 arachne_0vid ${client1}
-```
+    2) Colocation benchmark, uses 2 (or more) client machines:
+    ```
+    ./runSynthetic.sh <server> <key-min> <key-max> <data-size> <iterations> <synthetic_bench> <num-videos> <prefix: arachne/origin> [list of clients...]
+    ```
+    For example:
+    ```
+    ./runSynthetic.sh ${server} 1000000 9000000 200 1 workloads/Synthetic16.bench 0 arachne_0vid ${client1}
+    ```
