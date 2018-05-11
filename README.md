@@ -27,19 +27,19 @@ one of the memcached worker thread.
 
 1. Clone this repo and swith to the skewSynthetic branch.
 
-```
+    ```
 	MEMTIER_SKEWSYN_DIR=${HOME}/memtier_skewsyn
 	git clone https://github.com/PlatformLab/memtier_skewsyn.git ${MEMTIER_SKEWSYN_DIR}
 	cd ${MEMTIER_SKEWSYN_DIR}
 	git fetch
 	git checkout skewSynthetic
-```
+    ```
 
 2. Use the `scripts/prepare.sh` to install PerfUtils and compile memtier
-```
+    ```
     ./${MEMTIER_SKEWSYN_DIR}/scripts/prepare.sh
-```
-It will clone `PerfUtils` into memtier_skewsyn directory and build everything.
+    ```
+    It will clone `PerfUtils` into memtier_skewsyn directory and build everything.
 
 3. Run benchmarks:
 You can use this benchmark directly from command line, or you can reproduce
@@ -70,27 +70,28 @@ By default, logs will be saved in `${MEMTIER_SKEWSYN_DIR}/exp_logs`
 In order to reproduce colocation benchmark, you need to install video dependencies,
 inluding x264 and the raw video, on your memcached server machine.
 
-0. Put `${MEMTIER_SKEWSYN_DIR}/scripts/videoScripts` directory on your server,
-suppose the directory would be ${videoDir}.
+0. Put `${MEMTIER_SKEWSYN_DIR}/scripts/videoScripts` directory on your server machine,
+suppose the directory would be `${videoDir}`.
 
 1. In `${videoDir`}, install PerfUtils and x264 by running the script:
-```
-./prepareVideo.sh
-source ~/.bashrc
-```
-This script will download the video into `${videoDir}/input`, and install PerfUtils
-in `${videoDir}/PerfUtils`, install nasm and x264 in `${videoDir}/install`.
-It will also automatically update the `$PATH` in `~/.bashrc`. By default, logs
-will be saved to `${videoDir}/exp_logs`.
+    ```
+    ./prepareVideo.sh
+    source ~/.bashrc
+    ```
+    This script will download the video into `${videoDir}/input`, and install PerfUtils
+    in `${videoDir}/PerfUtils`, install nasm and x264 in `${videoDir}/install`.
+    It will also automatically update the `$PATH` in `~/.bashrc`. By default, logs
+    will be saved to `${videoDir}/exp_logs`.
 
 2. Test video encoding alone by running:
-```
+    ```
     ./runVideo.sh <InputFile.y4m> <prefix> <outputPrefix> <maxIter>
-```
-For example:
-```
+    ```
+    For example:
+    ```
     ./runVideo.sh input/sintel-1280.y4m a exp_logs/test 1
-```
-This will produce the video baseline data. `exp_logs/test_iter1.log` is the
-throughput per 200us, and `exp_logs/test_timetrace_iter1.log` has the
-coretrace log (which thread on which core).
+    ```
+    This will produce the video baseline results (video alone, no colocation
+    with memcached).  `exp_logs/test_iter1.log` is the throughput logged per
+    200us, and `exp_logs/test_timetrace_iter1.log` has the coretrace log (which
+    thread on which core).
