@@ -13,9 +13,9 @@ fi
 
 # Go to the correct directory
 dirPATH=$(dirname $(dirname $(readlink -f $0)))
+scriptPATH=$(dirname $(readlink -f $0))
 cd ${dirPATH}
 
-originalMemtier="$HOME/memtier_benchmark"
 server=$1
 keymin=$2
 keymax=$3
@@ -44,7 +44,7 @@ rm -rf $logdir/* # Clear previous logs
 rm $runlog
 
 # Load data into Memcached and warm up
-cmd="bash $originalMemtier/loadonly.sh $server $keymin $keymax $datasize $keyprefix"
+cmd="bash ${scriptPATH}/loadonly.sh $server $keymin $keymax $datasize $keyprefix"
 echo $cmd
 $cmd >> $runlog 2>&1
 
@@ -61,15 +61,15 @@ do
             shift
         done
 
-        clientlogdir=$HOME/memtier_benchmark_skewsyn/$logdir
-        clientbench=$HOME/memtier_benchmark_skewsyn/$benchfile
+        clientlogdir=$dirPATH/$logdir
+        clientbench=$dirPATH/$benchfile
 
         for client in "$@";
         do
             echo "Starting client: $client ..."
             clientqpsfile=${qpsprefix}_iter${iter}_${client}.csv
-            clientRunLog=$HOME/memtier_benchmark_skewsyn/${runlog}_${client}
-            cmd="$HOME/memtier_benchmark_skewsyn/memtier_benchmark -s $server \
+            clientRunLog=$dirPATH/${runlog}_${client}
+            cmd="$dirPATH/memtier_benchmark -s $server \
                  -p 11211 -P memcache_binary --clients $clients --threads $threads \
                  --ratio $ratio --pipeline=$pipeline \
                  --key-prefix=$keyprefix \
@@ -82,9 +82,9 @@ do
                  --log-dir=${clientlogdir} \
                  --log-qpsfile=$clientqpsfile"
             #echo $cmd
-            sshcmd="ssh -p 5515 $client \"nohup $cmd > $clientRunLog 2>&1 < /dev/null &\""
+            sshcmd="ssh -p 22 $client \"nohup $cmd > $clientRunLog 2>&1 < /dev/null &\""
             echo $sshcmd
-            ssh -p 5515 $client "nohup $cmd > $clientRunLog 2>&1 < /dev/null & "
+            ssh -p 22 $client "nohup $cmd > $clientRunLog 2>&1 < /dev/null & "
         done
     fi
 

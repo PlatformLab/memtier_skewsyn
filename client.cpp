@@ -234,12 +234,16 @@ bool client::finished(void)
     if (!master_finished) {
         return false;
     } else {
-        return true;
+        // If we provide benchmark file, then master_finished is the only thing
+        // to indicate finished or not.
+        if (m_config->config_file)
+            return true;
+        // Check whether we have exceeded the time or request
+        if (m_config->requests > 0 && m_reqs_processed >= m_config->requests)
+            return true;
+        if (m_config->test_time > 0 && m_stats.get_duration() >= m_config->test_time)
+            return true;
     }
-//    if (m_config->requests > 0 && m_reqs_processed >= m_config->requests)
-//        return true;
-//    if (m_config->test_time > 0 && m_stats.get_duration() >= m_config->test_time)
-//        return true;
     return false;    
 }
 

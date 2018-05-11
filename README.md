@@ -25,24 +25,7 @@ one of the memcached worker thread.
 
 ### How do I use memtier_skewsyn benchmark?
 
-You need two directories for two branches: the `master` branch and `skewSynthetic`
-branch. We will use `master` branch to prepare dataset, and use `skewSynthetic`
-branch to do experiments.
-
-0. Clone this repo, switch to master branch, and compile.
-
-```
-	MEMTIER_DIR=${HOME}/memtier_benchmark
-	git clone https://github.com/PlatformLab/memtier_skewsyn.git ${MEMTIER_DIR}
-	cd ${MEMTIER_DIR}
-	git fetch
-	git checkout master
-	autoreconf -ivf
-	./configure
-	make
-```
-
-1. Then clone the skewSynthetic branch.
+1. Clone this repo and swith to the skewSynthetic branch.
 
 ```
 	MEMTIER_SKEWSYN_DIR=${HOME}/memtier_skewsyn
@@ -52,27 +35,13 @@ branch to do experiments.
 	git checkout skewSynthetic
 ```
 
-2. Recursively clone [Arachne super repository](https://github.com/PlatformLab/arachne-all)
-inside memtier_skewsyn top level directory.
+2. Use the `scripts/prepare.sh` to install PerfUtils and compile memtier
 ```
-     git clone --recursive https://github.com/PlatformLab/arachne-all.git ${MEMTIER_SKEWSYN_DIR}/arachne-all
+    ./${MEMTIER_SKEWSYN_DIR}/scripts/prepare.sh
 ```
+It will clone `PerfUtils` into memtier_skewsyn directory and build everything.
 
-3. Build the Arachne library with `./buildAll.sh` in the top level directory. We only use PerfUtil part of it,
-so no need to start core arbiter on the client machine.
-```
-    cd ${MEMTIER_SKEWSYN_DIR}/arachne-all
-    ./buildAll.sh
-```
-
-4. Build memtier_skewsyn in top level directory
-```
-	autoreconf -ivf
-	./configure
-	make
-```
-
-5. Run benchmarks:
+3. Run benchmarks:
 You can use this benchmark directly from command line, or you can reproduce
 our experiments from the scripts in `${MEMTIER_SKEWSYN_DIR}/scripts/` directory.
 By default, logs will be saved in `${MEMTIER_SKEWSYN_DIR}/exp_logs`
@@ -86,7 +55,8 @@ By default, logs will be saved in `${MEMTIER_SKEWSYN_DIR}/exp_logs`
     ./runSkew.sh ${server} 1000000 9000000 200 1 workloads/Skew16.bench arachne_test
     ```
 
-    2) Colocation benchmark, uses 2 (or more) client machines:
+    2) Colocation benchmark, uses 2 (or more) client machines (we suppose memtier_skewsyn is installed in
+    the same path, or machines share the directory via nfs):
     ```
     ./runSynthetic.sh <server> <key-min> <key-max> <data-size> <iterations> <synthetic_bench> <num-videos> <prefix: arachne/origin> [list of clients...]
     ```

@@ -452,7 +452,7 @@ void shard_connection::fill_pipeline(void)
     }
 
     // Clipping based on pipeline size
-    while (!master_finished &&
+    while (!m_conns_manager->finished() &&
            m_pipeline->size() < m_config->pipeline &&
            nextCycleTime < currentTime) {
 

@@ -861,8 +861,8 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         }
     }
     if (cfg->config_file == NULL) {
-        fprintf(stderr, "ERROR: Please specify a configuration file!\n");
-        return -1;
+        fprintf(stderr, "No benchmark file! use default mode. \n");
+        master_finished = true;
     }
 
     if (cfg->ir_distribution != NULL) {
@@ -1096,6 +1096,15 @@ static void check_dir(std::string &dir) {
 
 static int parse_config_file(benchmark_config *cfg) {
     const char* config_file = cfg->config_file;
+    int numServerThreads = cfg->server_threads;
+    int numClients = cfg->threads * cfg->clients;
+
+    if (config_file == NULL) {
+        for (int i = 0; i < numServerThreads; ++i) {
+            qpsPerClient.push_back(0);
+        }
+        return 0;
+    }
     FILE* specFile = fopen(config_file, "r");
     if (!specFile) {
         fprintf(stderr, "Configuration file '%s' non existent! \n", config_file);
@@ -1108,6 +1117,7 @@ static int parse_config_file(benchmark_config *cfg) {
     }
     sscanf(buffer, "%zu %d", &numIntervals, &cfg->server_threads);
     intervals = new Interval[numIntervals];
+    numServerThreads = cfg->server_threads;
 
     for (size_t i = 0; i < numIntervals; ++i) {
         if (fgets(buffer, 1024, specFile) == NULL) {
@@ -1120,8 +1130,6 @@ static int parse_config_file(benchmark_config *cfg) {
     fclose(specFile);
 
     // Initialize per client qps
-    int numServerThreads = cfg->server_threads;
-    int numClients = cfg->threads * cfg->clients;
     currGoalQPS = intervals[0].requestsPerSecond;
     currentSkew = intervals[0].skewFactor;
 
@@ -1374,7 +1382,9 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
 
     // launch the master thread that controls the rate of requests
     pthread_t master_tid;
-    pthread_create(&master_tid, NULL, start_master, cfg);
+    if (cfg->config_file) {
+        pthread_create(&master_tid, NULL, start_master, cfg);
+    }
 
     struct timeval curstartTime, prevstartTime, startTime, stopTime;
     gettimeofday(&prevstartTime, NULL);
@@ -1629,7 +1639,9 @@ run_stats run_benchmark(int run_id, benchmark_config* cfg, object_generator* obj
 #endif
 
     // join the master thread
-    join_master(master_tid);
+    if (cfg->config_file) {
+        join_master(master_tid);
+    }
 
     // join all threads back and unify stats
     run_stats stats;
