@@ -64,3 +64,33 @@ By default, logs will be saved in `${MEMTIER_SKEWSYN_DIR}/exp_logs`
     ```
     ./runSynthetic.sh ${server} 1000000 9000000 200 1 workloads/Synthetic16.bench 0 arachne_0vid ${client1}
     ```
+
+### How to play with video colocation workload?
+
+In order to reproduce colocation benchmark, you need to install video dependencies,
+inluding x264 and the raw video, on your memcached server machine.
+
+0. Put `${MEMTIER_SKEWSYN_DIR}/scripts/videoScripts` directory on your server,
+suppose the directory would be ${videoDir}.
+
+1. In `${videoDir`}, install PerfUtils and x264 by running the script:
+```
+./prepareVideo.sh
+source ~/.bashrc
+```
+This script will download the video into `${videoDir}/input`, and install PerfUtils
+in `${videoDir}/PerfUtils`, install nasm and x264 in `${videoDir}/install`.
+It will also automatically update the `$PATH` in `~/.bashrc`. By default, logs
+will be saved to `${videoDir}/exp_logs`.
+
+2. Test video encoding alone by running:
+```
+    ./runVideo.sh <InputFile.y4m> <prefix> <outputPrefix> <maxIter>
+```
+For example:
+```
+    ./runVideo.sh input/sintel-1280.y4m a exp_logs/test 1
+```
+This will produce the video baseline data. `exp_logs/test_iter1.log` is the
+throughput per 200us, and `exp_logs/test_timetrace_iter1.log` has the
+coretrace log (which thread on which core).
