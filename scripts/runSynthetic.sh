@@ -5,7 +5,7 @@
 scriptname=`basename "$0"`
 if [[ "$#" -lt 8 ]]; then
     echo "Usage: $scriptname <server> <key-min> <key-max> <data-size>" \
-         "<iterations> <synthetic_bench> <num-videos> <prefix: arachne/origin>" \
+         "<iterations> <synthetic_bench> <video[0/1]> <prefix: arachne/origin>" \
          "[list of clients...]"
     echo "Example: $scriptname n1 100000 200000 32 5 workloads/LoadEstimator.bench 1 arachne n3 n4..."
     exit
@@ -15,6 +15,8 @@ fi
 dirPATH=$(dirname $(dirname $(readlink -f $0)))
 scriptPATH=$(dirname $(readlink -f $0))
 cd ${dirPATH}
+
+videoPATH=${scriptPATH}/videoScripts
 
 server=$1
 keymin=$2
@@ -110,7 +112,7 @@ do
         --test-time=1 -b \
         --config-file=$benchfile --ir-dist=$irdist --log-dir=$logdir \
         --log-qpsfile=$logqpsfile --log-latencyfile=$latencyfile \
-        --videos=$videos"
+        --videos=$videos --video-path=${videoPATH}"
 
     # execute the commnad
     echo $cmd

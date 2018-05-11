@@ -103,6 +103,7 @@ struct benchmark_config {
 
     // Background video tasks
     int num_videos;
+    const char* video_dir;
 };
 
 

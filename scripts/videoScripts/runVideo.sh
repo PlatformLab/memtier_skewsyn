@@ -10,6 +10,9 @@ if [[ "$#" -lt 3 ]]; then
     exit
 fi
 
+scriptPATH=$(dirname $(readlink -f $0))
+cd ${scriptPATH}
+
 iters=1
 if [[ "$#" -ge 4 ]]; then
     iters=$4
@@ -28,7 +31,7 @@ do
     logfile=${outPrefix}_iter${iter}.log
     tracefile=${outPrefix}_timetrace_iter${iter}.log
 
-    x264 $inputfile -o $outfile --qpslogfile $logfile --timetrace $tracefile --coretrace $prefix
+    install/bin/x264 $inputfile -o $outfile --qpslogfile $logfile --timetrace $tracefile --coretrace $prefix
 
     rm $outfile # We don't need the output file!
 

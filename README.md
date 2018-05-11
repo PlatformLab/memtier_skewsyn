@@ -58,7 +58,7 @@ By default, logs will be saved in `${MEMTIER_SKEWSYN_DIR}/exp_logs`
     2) Colocation benchmark, uses 2 (or more) client machines (we suppose memtier_skewsyn is installed in
     the same path, or machines share the directory via nfs):
     ```
-    ./runSynthetic.sh <server> <key-min> <key-max> <data-size> <iterations> <synthetic_bench> <num-videos> <prefix: arachne/origin> [list of clients...]
+    ./runSynthetic.sh <server> <key-min> <key-max> <data-size> <iterations> <synthetic_bench> <videos[0/1]> <prefix: arachne/origin> [list of clients...]
     ```
     For example:
     ```
@@ -95,3 +95,14 @@ suppose the directory would be `${videoDir}`.
     with memcached).  `exp_logs/test_iter1.log` is the throughput logged per
     200us, and `exp_logs/test_timetrace_iter1.log` has the coretrace log (which
     thread on which core).
+
+3. Run colocation benchmark. Our machines are connected via NFS, so the
+`videoDir` will be in `${MEMTIER_SKEWSYN_DIR}/scripts/videoScripts` directory.
+If you have a different path on your memcached server machine, you need to
+modify `videoPATH` parameter in the `runSynthetic.sh` file. Then simply run:
+    ```
+    ./runSynthetic.sh ${server} 1000000 9000000 200 1 workloads/Synthetic16.bench 1 arachne_1vid ${client1}
+    ```
+    You will find the corresponding log directories in `${videoDir}/exp_logs` and
+    `${MEMTIER_SKEWSYN_DIR}/exp_logs`.
+

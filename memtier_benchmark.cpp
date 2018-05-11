@@ -128,13 +128,13 @@ void benchmark_log(int level, const char *fmt, ...)
 static void start_video_decoding(const char* videoFile, const char* prefix,
                                  struct benchmark_config *cfg) {
     char cmd[1000];
-    sprintf(cmd, "ssh -p 22 %s \" nohup mkdir -p /scratch/mydata/logs/%s \" & ",
-            cfg->server, cfg->log_dir);
+    sprintf(cmd, "ssh -p 22 %s \" nohup mkdir -p %s/%s \" & ",
+            cfg->server, cfg->video_dir, cfg->log_dir);
     if (system(cmd) == -1) {
         fprintf(stderr, "Fail to mkdir for logs \n");
         exit(-1);
     } else {
-        fprintf(stderr, "Success: mkdir /scrach/mydata/logs/%s \n", cfg->log_dir);
+        fprintf(stderr, "Success: mkdir %s/%s \n", cfg->video_dir, cfg->log_dir);
     }
 
     // Get rid of the extension of the file
@@ -142,12 +142,12 @@ static void start_video_decoding(const char* videoFile, const char* prefix,
     filePrefix.erase(filePrefix.find_last_of("."), std::string::npos);
 
     sprintf(cmd, "ssh -p 22 %s "
-            "\" nohup /scratch/mydata/scripts/DecodeWithConfig.sh "
-            "/scratch/mydata/input/%s %s "
-            "/scratch/mydata/logs/%s/%s_%s %d > /dev/null "
+            "\" nohup %s/runVideo.sh "
+            "%s/input/%s %s "
+            "%s/%s/%s_%s %d > /dev/null "
             "2> /dev/null < /dev/null &\"",
-            cfg->server,
-            videoFile, prefix, cfg->log_dir, filePrefix.c_str(), videoFile,
+            cfg->server, cfg->video_dir, cfg->video_dir,
+            videoFile, prefix, cfg->video_dir, cfg->log_dir, filePrefix.c_str(), videoFile,
             maxIters);
     fprintf(stderr, "%s \n", cmd);
     if (system(cmd) == -1) {
@@ -433,7 +433,8 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         o_log_dir,
         o_log_qps_file,
         o_log_latency_file,
-        o_videos
+        o_videos,
+        o_videoPath
     };
     
     static struct option long_options[] = {
@@ -493,6 +494,7 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         { "log-qpsfile",                1, 0, o_log_qps_file},
         { "log-latencyfile",            1, 0, o_log_latency_file},
         { "videos",                     1, 0, o_videos},
+        { "video-path",                  1, 0, o_videoPath},
         { NULL,                         0, 0, 0 }
     };
 
@@ -555,6 +557,9 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
                         fprintf(stderr, "error: num of videos must be greater than zero.\n");
                         return -1;
                     }
+                    break;
+                case o_videoPath:
+                    cfg->video_dir = optarg;
                     break;
                 case o_log_qps_file:
                     cfg->log_qps_file = optarg;
@@ -889,12 +894,19 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
     }
 
     // By default don't record latency!
-//    if (cfg->log_latency_file == NULL) {
-//        cfg->log_latency_file = "latency.log";
-//    }
-//
+
+    // Current design only support 1 background video
+    // because /tmp/x264.pid will be overwritten by multiple instances.
     if (cfg->num_videos > 0) {
-        fprintf(stderr, "Number of background videos: %d \n", cfg->num_videos);
+        if (cfg->num_videos != 1) {
+            fprintf(stderr, "Cannot support multiple videos: %d \n", cfg->num_videos);
+            return -1;
+        }
+        if (cfg->video_dir == NULL) {
+            fprintf(stderr, "Must provide remote video path \n");
+            return -1;
+        }
+        fprintf(stderr, "With 1 background video, remote video path: %s \n", cfg->video_dir);
     } else {
         fprintf(stderr, "No background videos \n");
     }
@@ -995,6 +1007,7 @@ void usage() {
             "      --log-latencyfile          File name to store latency log \n"
             "VIDEO BACKGROUND Option:\n"
             "      --videos=NUM               Number of background video processes to start\n"
+            "      --video-path               Remote path where video scripts installed\n"
             "\n"
             );
     
@@ -1183,7 +1196,7 @@ static void* start_master(void *arg) {
         char videoName[100];
         char prefixstr[10];
         for (int i = 1; i <= cfg->num_videos; ++i) {
-            sprintf(videoName, "sintel-1280-copy%d.y4m", i);
+            sprintf(videoName, "sintel-1280.y4m");
             char prefix = 'a' + i - 1;
             sprintf(prefixstr, "%c", prefix);
             start_video_decoding(videoName, prefixstr, cfg);
