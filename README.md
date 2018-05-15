@@ -8,8 +8,9 @@ and the skew & colocation benchmark we used for the paper
 (`skewSynthetic` branch).
 
 ## Note
+This repo is under construction, tests may be failing.
 If you are going to reproduce the experiments (especially with background video
-task), please contact us.
+task), please contact us if you encountered any problem.
 
 The main differences from memtier_benchmark are:
 1. It sends out requests independently without buffering. Original memtier_benchmark
@@ -37,7 +38,7 @@ one of the memcached worker thread.
 
 2. Use the `scripts/prepare.sh` to install PerfUtils and compile memtier
     ```
-    ./${MEMTIER_SKEWSYN_DIR}/scripts/prepare.sh
+    ./scripts/prepare.sh
     ```
     It will clone `PerfUtils` into memtier_skewsyn directory and build everything.
 
