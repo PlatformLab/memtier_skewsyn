@@ -69,29 +69,30 @@ By default, logs will be saved in `${MEMTIER_SKEWSYN_DIR}/exp_logs`
 
 4. Parse logs:
 
-For skew benchmark, the logs loacte at
-`${MEMTIER_SKEWSYN_DIR}/exp_logs/<log directory prefix>_iters<iterations>_skew_logs/`
-directory.
+    For skew benchmark, the logs locate at
+    `${MEMTIER_SKEWSYN_DIR}/exp_logs/<log directory prefix>_iters<iterations>_skew_logs/`
+    directory.
 
-For colocation benchmark, the logs are at
-`${MEMTIER_SKEWSYN_DIR}/exp_logs/<log directory prefix>_iters<iterations>_synthetic_logs/`
+    For colocation benchmark, the logs are at
+    `${MEMTIER_SKEWSYN_DIR}/exp_logs/<log directory prefix>_iters<iterations>_synthetic_logs/`
 
-Inside the directory there are two directories: `latency/` and `throughput/`.
-`latency/` contains the latency log files on the main client machine.
-`throughput/` has throughput logs for both main client machine and ${client1}
-machine. The structures are as follows:
+    Inside the directory there are two directories: `latency/` and `throughput/`.
+    `latency/` contains the latency log files on the main client machine.
+    `throughput/` has throughput logs for both main client machine and secondary client
+    machines. The structures are as follows:
 
-```
-latency/ (skew workload does not record latencies)
-|---- latency_iter1.csv
-|---- latency_iter2.csv
-|...
+    ```
+    latency/ (skew workload does not record latencies)
+    |---- latency_iter1.csv
+    |---- latency_iter2.csv
+    |...
 
-throughput/
-|---- qps_iter1.csv
-|---- qps_iter1_${client1}.csv (for colocation workload)
-|...
-```
+    throughput/
+    |---- qps_iter1.csv
+    |---- qps_iter1_${client1}.csv (for colocation workload)
+    |---- qps_iter1_${client2}.csv (for colocation workload)
+    |...
+    ```
 
 ### How to play with video colocation workload?
 
