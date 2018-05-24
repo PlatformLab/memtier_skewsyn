@@ -26,14 +26,12 @@ one of the memcached worker thread.
 
 ### How do I use memtier_skewsyn benchmark?
 
-1. Clone this repo and swith to the skewSynthetic branch.
+1. Clone this repo to your target directory ${MEMTIER_SKEWSYN_DIR}.
+The default branch is `skewSynthetic` branch.
 
     ```
-	MEMTIER_SKEWSYN_DIR=${HOME}/memtier_skewsyn
 	git clone https://github.com/PlatformLab/memtier_skewsyn.git ${MEMTIER_SKEWSYN_DIR}
 	cd ${MEMTIER_SKEWSYN_DIR}
-	git fetch
-	git checkout skewSynthetic
     ```
 
 2. Use the `scripts/prepare.sh` to install PerfUtils and compile memtier
@@ -49,7 +47,7 @@ By default, logs will be saved in `${MEMTIER_SKEWSYN_DIR}/exp_logs`
 
     1) Skew benchmark, only uses 1 client machine:
     ```
-    ./runSkew.sh <server> <key-min> <key-max> <data-size>  <iterations> <skew_bench> <log directory prefix: arachne/origin>
+    ./runSkew.sh <server> <key-min> <key-max> <data-size>  <iterations> <skew_bench> <log directory prefix>
     ```
     For example:
     ```
@@ -59,12 +57,41 @@ By default, logs will be saved in `${MEMTIER_SKEWSYN_DIR}/exp_logs`
     2) Colocation benchmark, uses 2 (or more) client machines (we suppose memtier_skewsyn is installed in
     the same path, or machines share the directory via nfs):
     ```
-    ./runSynthetic.sh <server> <key-min> <key-max> <data-size> <iterations> <synthetic_bench> <videos[0/1]> <prefix: arachne/origin> [list of clients...]
+    ./runSynthetic.sh <server> <key-min> <key-max> <data-size> <iterations> <synthetic_bench> <video[0/1]> <log directory prefix> [list of clients...]
     ```
     For example:
     ```
     ./runSynthetic.sh ${server} 1000000 9000000 200 1 workloads/Synthetic16.bench 0 arachne_0vid ${client1}
     ```
+    If you set `<video>` option to 0, it will run without background video processes.
+    If you are interested in the video colocation workload, please follow
+    instructions in the [following section](#how-to-play-with-video-colocation-workload).
+
+4. Parse logs:
+
+For skew benchmark, the logs loacte at
+`${MEMTIER_SKEWSYN_DIR}/exp_logs/<log directory prefix>_iters<iterations>_skew_logs/`
+directory.
+
+For colocation benchmark, the logs are at
+`${MEMTIER_SKEWSYN_DIR}/exp_logs/<log directory prefix>_iters<iterations>_synthetic_logs/`
+
+Inside the directory there are two directories: `latency/` and `throughput/`.
+`latency/` contains the latency log files on the main client machine.
+`throughput/` has throughput logs for both main client machine and ${client1}
+machine. The structures are as follows:
+
+```
+latency/ (skew workload does not record latencies)
+|---- latency_iter1.csv
+|---- latency_iter2.csv
+|...
+
+throughput/
+|---- qps_iter1.csv
+|---- qps_iter1_${client1}.csv (for colocation workload)
+|...
+```
 
 ### How to play with video colocation workload?
 
@@ -83,6 +110,8 @@ suppose the directory would be `${videoDir}`.
     in `${videoDir}/PerfUtils`, install nasm and x264 in `${videoDir}/install`.
     It will also automatically update the `$PATH` in `~/.bashrc`. By default, logs
     will be saved to `${videoDir}/exp_logs`.
+    This script can take a couple of minutes, especially the video downloading
+    part.
 
 2. Test video encoding alone by running:
     ```
@@ -104,6 +133,8 @@ modify `videoPATH` parameter in the `runSynthetic.sh` file. Then simply run:
     ```
     ./runSynthetic.sh ${server} 1000000 9000000 200 1 workloads/Synthetic16.bench 1 arachne_1vid ${client1}
     ```
-    You will find the corresponding log directories in `${videoDir}/exp_logs` and
-    `${MEMTIER_SKEWSYN_DIR}/exp_logs`.
+    You will find the corresponding log directories in
+    `${videoDir}/exp_logs/<log directory prefix>_iters<iterations>_synthetic_logs/` and
+    `${MEMTIER_SKEWSYN_DIR}/exp_logs/<log directory prefix>_iters<iterations>_synthetic_logs/`.
+    The log directory structures are the same as we described before.
 

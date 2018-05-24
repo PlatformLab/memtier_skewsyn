@@ -7,7 +7,7 @@ if [[ "$#" -lt 8 ]]; then
     echo "Usage: $scriptname <server> <key-min> <key-max> <data-size>" \
          "<iterations> <synthetic_bench> <video[0/1]> <prefix: arachne/origin>" \
          "[list of clients...]"
-    echo "Example: $scriptname n1 100000 200000 32 5 workloads/LoadEstimator.bench 1 arachne n3 n4..."
+    echo "Example: $scriptname n1 1000000 9000000 200 1 workloads/Synthetic16.bench 0 arachne_0vid n3"
     exit
 fi
 
@@ -42,7 +42,7 @@ runlog=exp_logs/${prefix}_iters${iters}_synthetic_runlog.log
 echo "Saving logs to: $logdir"
 mkdir -p $logdir
 rm -rf $logdir/* # Clear previous logs
-rm $runlog
+rm -f $runlog
 
 # Load data into Memcached and warm up
 cmd="bash $scriptPATH/loadonly.sh $server $keymin $keymax $datasize $keyprefix"
@@ -95,10 +95,9 @@ do
         pipeline=1
         irdist="UNIFORM"
         benchfile=workloads/Synthetic16-master.bench
-        #benchfile=workloads/Synthetic16_1sec-master.bench
     fi
 
-    # Master usually run in non-blocking mode
+    # Start the main master node
     logqpsfile=${qpsprefix}_iter${iter}.csv
     latencyfile=${latencyprefix}_iter${iter}.csv
     cmd="./memtier_benchmark -s $server -p 11211 -P memcache_binary \
@@ -116,7 +115,6 @@ do
 
     # execute the commnad
     echo $cmd
-    # $cmd >> $runlog 2>&1
     $cmd 2>&1 | tee -a $runlog
 done
 
@@ -128,10 +126,10 @@ mkdir -p $qpsdir
 mkdir -p $latencydir
 
 # Clean those directories
-rm $qpsdir/*
-rm $latencydir/*
-mv $logdir/${qpsprefix}_iter* $qpsdir
-mv $logdir/${latencyprefix}_iter* $latencydir
+rm -f $qpsdir/*
+rm -f $latencydir/*
+mv $logdir/${qpsprefix}_iter* $qpsdir > /dev/null 2>&1
+mv $logdir/${latencyprefix}_iter* $latencydir > /dev/null 2>&1
 
 # Merge the data
 #cmd="scripts/mergeStats.py ${qpsdir} ${prefix}_iters${iters}_qps"
