@@ -57,7 +57,8 @@ git clone https://github.com/PlatformLab/x264.git ${x264PATH}
 pushd x264
 git fetch
 git checkout AddPerSecondLogging
-./Install.sh ${installPATH} ${PERFUTIL_DIR}
+# Default use NICE value.
+./Install.sh ${installPATH} ${PERFUTIL_DIR} 1
 popd
 
 logDir=${scriptPATH}/exp_logs

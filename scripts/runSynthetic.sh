@@ -49,7 +49,7 @@ cmd="bash $scriptPATH/loadonly.sh $server $keymin $keymax $datasize $keyprefix"
 echo $cmd
 $cmd >> $runlog 2>&1
 
-read -p "Press enter to continue"
+# read -p "Press enter to continue"
 
 # Execute experiments multiple times
 for iter in `seq 1 $iters`;
