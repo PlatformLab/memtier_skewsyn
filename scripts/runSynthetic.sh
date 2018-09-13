@@ -1,6 +1,15 @@
 #!/bin/bash
 
 # This script is used to run synthetic workload
+cleanup_coretrace()
+{
+    server=$1
+    echo "Cleanup corestats on the server"
+    cmd="kill -SIGUSR2 \$(pidof memcached)"
+    sshcmd="ssh -p 22 $server \"nohup $cmd > /dev/null 2>&1 < /dev/null &\""
+    echo $sshcmd
+    ssh -p 22 $server "nohup $cmd > /dev/null 2>&1 < /dev/null & "
+}
 
 scriptname=`basename "$0"`
 if [[ "$#" -lt 8 ]]; then
@@ -49,7 +58,10 @@ cmd="bash $scriptPATH/loadonly.sh $server $keymin $keymax $datasize $keyprefix"
 echo $cmd
 $cmd >> $runlog 2>&1
 
-# read -p "Press enter to continue"
+# read -p "Press enter to continue. (may need to cleanup coretrace on server.)"
+# Wait the memcached fully ramped down.
+sleep 5
+cleanup_coretrace $server
 
 # Execute experiments multiple times
 for iter in `seq 1 $iters`;
@@ -117,6 +129,8 @@ do
     echo $cmd
     $cmd 2>&1 | tee -a $runlog
 done
+
+cleanup_coretrace $server
 
 # Move throughput logs and latency logs to different directory
 cd ${dirPATH}
