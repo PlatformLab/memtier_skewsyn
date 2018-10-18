@@ -24,7 +24,7 @@ echo "Downloading the video"
 
 videoPATH=${scriptPATH}/input
 mkdir -p ${videoPATH}
-wget -O ${videoPATH}/sintel-1280-raw.y4m "https://xiph-media.net/sintel/sintel-1280.y4m"
+wget -O ${videoPATH}/sintel-1280-raw.y4m "https://media.xiph.org/sintel/sintel-1280.y4m"
 
 sudo apt-get install ffmpeg
 ffmpeg -i ${videoPATH}/sintel-1280-raw.y4m -filter:v "crop=1280:544:0:0" ${videoPATH}/sintel-1280.y4m
